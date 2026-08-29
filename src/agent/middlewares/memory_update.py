@@ -15,12 +15,20 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
+from langgraph.constants import TAG_NOSTREAM
+
+from agent.internal_messages import (
+    INTERNAL_MEMORY_MODEL_NAME,
+    INTERNAL_MEMORY_TAG,
+    INTERNAL_MODEL_METADATA_KEY,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +46,44 @@ _SKIP_PATTERNS = [
     "你能做什么", "你有哪些功能", "你是谁",
     "我之前的偏好", "我的偏好", "我的记忆",
 ]
+
+# 只有采购意向、没有任何具体对象的消息不值得写入长期记忆。
+_GENERIC_PROCUREMENT_REQUESTS = {
+    "采购",
+    "我要采购",
+    "我想采购",
+    "我需要采购",
+    "需要采购",
+    "想采购",
+    "帮我采购",
+    "我要采购一下",
+    "我想采购一下",
+}
+
+# 摘要模型明确表示信息不足时，不把该摘要写入 recent_queries。
+_VAGUE_QUERY_MARKERS = (
+    "未说明",
+    "未提供",
+    "未明确",
+    "未指定",
+    "没有说明",
+    "没有提供",
+    "没有明确",
+    "尚未说明",
+    "尚未明确",
+    "具体需求不明",
+    "需要进一步说明",
+    "需要补充",
+)
+
+
+def _normalize_short_text(content: str) -> str:
+    return re.sub(r"[\s，。！？、,.!?；;：:]", "", content.lower())
+
+
+def _is_vague_query(query: str) -> bool:
+    normalized = query.strip()
+    return not normalized or any(marker in normalized for marker in _VAGUE_QUERY_MARKERS)
 
 
 def _is_meaningful_erp_exchange(messages: List[BaseMessage]) -> Optional[str]:
@@ -73,6 +119,9 @@ def _is_meaningful_erp_exchange(messages: List[BaseMessage]) -> Optional[str]:
     for pattern in _SKIP_PATTERNS:
         if pattern.lower().replace(" ", "") in content_lower:
             return None
+
+    if _normalize_short_text(content) in _GENERIC_PROCUREMENT_REQUESTS:
+        return None
 
     # 检查是否包含 ERP 关键词
     has_erp_keyword = any(
@@ -122,6 +171,7 @@ async def _extract_entities(
 Rules:
 1. "suppliers": Company/supplier names mentioned. Include both Chinese and English names. Empty list if none.
 2. "query": One-line summary of the user's procurement need. Empty string if not procurement-related.
+3. If the user only expresses a general procurement intent but provides no concrete material, supplier, quantity, budget, comparison target, or other requirement, return an empty "query".
 
 User message: {user_message}
 
@@ -131,7 +181,17 @@ Return ONLY a JSON object, no other text:
 {{"suppliers": ["CompanyA", "CompanyB"], "query": "brief summary"}}"""
 
     try:
-        response = await model.ainvoke(prompt)
+        response = await model.ainvoke(
+            prompt,
+            config={
+                # LangGraph 的 messages 流会原生忽略 nostream 标签。
+                "tags": [TAG_NOSTREAM, INTERNAL_MEMORY_TAG],
+                "metadata": {
+                    INTERNAL_MODEL_METADATA_KEY: INTERNAL_MEMORY_MODEL_NAME
+                },
+                "run_name": "erp_memory_update_extract",
+            },
+        )
 
         # 从回复中提取 JSON
         text = response.content
@@ -147,9 +207,22 @@ Return ONLY a JSON object, no other text:
         end = text.rfind("}")
         if start != -1 and end != -1 and end > start:
             result = json.loads(text[start:end + 1])
+            suppliers = result.get("suppliers", [])
+            if not isinstance(suppliers, list):
+                suppliers = []
+            suppliers = [
+                str(supplier).strip()
+                for supplier in suppliers
+                if str(supplier).strip()
+            ]
+
+            query = result.get("query", "")
+            query = str(query).strip() if query is not None else ""
+            if _is_vague_query(query):
+                query = ""
             return {
-                "suppliers": result.get("suppliers", []),
-                "query": result.get("query", ""),
+                "suppliers": suppliers,
+                "query": query,
             }
     except Exception:
         logger.warning("MemoryUpdateMiddleware: LLM 提取失败，跳过本次更新", exc_info=True)
@@ -343,8 +416,16 @@ def _merge_preferences(
             merged_suppliers.append(s)
     merged_suppliers = merged_suppliers[:10]
 
-    merged_queries = [new_query] if new_query else []
+    merged_queries = (
+        [new_query]
+        if new_query and not _is_vague_query(new_query)
+        else []
+    )
     for q in existing_queries:
+        # 旧版本可能已经把“未说明具体物料”一类内部摘要写进偏好文件，
+        # 在下一次合并时顺便清理，避免继续注入后续对话上下文。
+        if _is_vague_query(q):
+            continue
         if q.strip() not in [m.strip() for m in merged_queries]:
             merged_queries.append(q)
     merged_queries = merged_queries[:5]

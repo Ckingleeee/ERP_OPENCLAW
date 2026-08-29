@@ -505,7 +505,7 @@ async def stream_chat_response(
             content_text = extract_content_from_token(token)
             has_tool_calls = hasattr(token, 'tool_call_chunks') and token.tool_call_chunks
             is_tool_result = hasattr(token, 'type') and token.type == "tool"
-            is_internal_message = is_internal_stream_message(token)
+            is_internal_message = is_internal_stream_message(token, metadata)
 
             if (
                 content_text

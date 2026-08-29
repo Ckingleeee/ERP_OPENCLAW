@@ -24,7 +24,7 @@ from api_view.web_config import (
     MONGODB_DB_NAME,
     MONGODB_CHECKPOINT_COLLECTION,
 )
-from api_view.message_visibility import strip_internal_context_prefix
+from api_view.message_visibility import sanitize_legacy_assistant_content
 
 from agent.main_agent import create_main_agent, precompute_agent_context, PrecomputedContext
 from agent.backends import sandbox_manager
@@ -378,22 +378,22 @@ class AgentLoader:
             if not docs:
                 return None
             messages = []
-            hidden_context_count = 0
+            hidden_internal_count = 0
             for doc in docs:
                 message = doc["message"]
                 content = message.get("content")
-                if isinstance(content, str):
-                    visible_content = strip_internal_context_prefix(content)
+                if message.get("role") == "assistant" and isinstance(content, str):
+                    visible_content = sanitize_legacy_assistant_content(content)
                     if visible_content != content:
-                        hidden_context_count += 1
+                        hidden_internal_count += 1
                         if not visible_content:
                             continue
                         message = {**message, "content": visible_content}
                 messages.append(message)
-            if hidden_context_count:
+            if hidden_internal_count:
                 print(
-                    "[AgentLoader] 已隐藏历史消息中的系统上下文，"
-                    f"thread_id={thread_id}, count={hidden_context_count}"
+                    "[AgentLoader] 已隐藏历史消息中的内部内容，"
+                    f"thread_id={thread_id}, count={hidden_internal_count}"
                 )
             print(f"[AgentLoader] 已读取 {len(messages)} 条展示消息，thread_id={thread_id}")
             return messages

@@ -18,9 +18,9 @@ from typing import Any, Dict, Optional
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import SystemMessage
 
-logger = logging.getLogger(__name__)
+from agent.internal_messages import INTERNAL_CONTEXT_MARKER
 
-INTERNAL_CONTEXT_MARKER = "erp_internal_user_context"
+logger = logging.getLogger(__name__)
 
 
 def _message_has_user_context(message: Any, user_id: str) -> bool:
