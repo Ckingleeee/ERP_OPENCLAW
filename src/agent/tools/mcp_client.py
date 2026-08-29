@@ -10,6 +10,7 @@ MCP 工具客户端。
     all_tools, analyst_tools, order_tools, chart_tools = await load_mcp_tools()
 """
 
+import os
 from typing import List, Tuple
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -20,11 +21,14 @@ MCP_SERVER_CONFIG = {
         "url": "http://127.0.0.1:8000/mcp",
         "transport": "streamable_http",
     },
-    "analysis": {
-        "url": "https://mcp.api-inference.modelscope.net/af3893df5be041/mcp",
-        "transport": "streamable_http",
-    },
 }
+
+ANALYSIS_MCP_URL = os.getenv("ANALYSIS_MCP_URL", "").strip()
+if ANALYSIS_MCP_URL:
+    MCP_SERVER_CONFIG["analysis"] = {
+        "url": ANALYSIS_MCP_URL,
+        "transport": "streamable_http",
+    }
 
 # 工具分组规则（前缀匹配）
 ANALYST_TOOL_PREFIXES = ("supplier_", "part_", "inventory_")
@@ -58,10 +62,19 @@ async def load_mcp_tools(
     erp_tools = await mcp_client.get_tools(server_name="erp-api")
     print(f"[INFO] 已从 ERP MCP Server 加载 {len(erp_tools)} 个工具")
 
-    # 从魔塔社区 MCP Server 获取图表工具
-    analysis_tools = await mcp_client.get_tools(server_name="analysis")
-    print(f"[INFO] 已从魔塔社区 MCP Server 加载 {len(analysis_tools)} 个工具（可视化+其他）")
-    print(f"[INFO] 所有已从魔塔社区 MCP Server 加载 {analysis_tools} ")
+    # 外部分析 MCP 是可选能力，连接失败不应阻止 ERP Web 服务启动。
+    analysis_tools = []
+    if "analysis" in server_config:
+        try:
+            analysis_tools = await mcp_client.get_tools(server_name="analysis")
+            print(
+                f"[INFO] 已从外部分析 MCP Server 加载 "
+                f"{len(analysis_tools)} 个工具"
+            )
+        except Exception as exc:
+            print(f"[WARNING] 外部分析 MCP Server 不可用，已跳过: {exc}")
+    else:
+        print("[INFO] 未配置 ANALYSIS_MCP_URL，已跳过外部分析工具")
 
     # 合并全部工具
     all_tools = list(erp_tools) + list(analysis_tools)

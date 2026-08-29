@@ -1,7 +1,7 @@
 {
   "name": "deepagent-chat-frontend",
   "version": "1.0.0",
-  "description": "DeepAgent 聊天前端 - 基于 Vue 3",
+  "description": "智能采购助手ERP前端 - 基于 Vue 3",
   "type": "module",
   "scripts": {
     "dev": "vite",

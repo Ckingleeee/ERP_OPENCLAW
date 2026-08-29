@@ -1,12 +1,24 @@
 <template>
-  <div class="app-container">
+  <div v-if="authLoading" class="auth-loading">
+    <div class="auth-loading-mark"></div>
+    <span>正在验证登录状态…</span>
+  </div>
+
+  <LoginView
+    v-else-if="!currentUser"
+    @authenticated="handleAuthenticated"
+  />
+
+  <div v-else class="app-container">
     <!-- 侧边栏 -->
     <Sidebar
       :sessions="sessions"
       :current-thread-id="currentThreadId"
+      :current-user="currentUser"
       @select-session="handleSelectSession"
       @new-chat="handleNewChat"
       @delete-session="handleDeleteSession"
+      @logout="handleLogout"
     />
 
     <!-- 主内容区 -->
@@ -41,13 +53,15 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import Sidebar from './components/Sidebar.vue'
 import ChatArea from './components/ChatArea.vue'
 import InputArea from './components/InputArea.vue'
 import InterruptBanner from './components/InterruptBanner.vue'
+import LoginView from './components/LoginView.vue'
 import { streamChat, resumeChat } from './api/chat.js'
 import { getSessions, getMessages, deleteSession } from './api/history.js'
+import { getCurrentUser, logout } from './api/auth.js'
 
 /**
  * DeepAgent 聊天应用主组件
@@ -64,6 +78,9 @@ import { getSessions, getMessages, deleteSession } from './api/history.js'
 
 // 会话列表
 const sessions = ref([])
+// 可信登录用户（由后端 HttpOnly Cookie 解析）
+const currentUser = ref(null)
+const authLoading = ref(true)
 // 当前会话 ID
 const currentThreadId = ref(null)
 // 消息列表（混合 user/assistant/tool，按时间顺序）
@@ -87,8 +104,46 @@ let abortController = null
  * 组件挂载时加载会话列表
  */
 onMounted(async () => {
-  await loadSessions()
+  window.addEventListener('auth:unauthorized', handleUnauthorized)
+  try {
+    currentUser.value = await getCurrentUser()
+    if (currentUser.value) {
+      await loadSessions()
+    }
+  } catch (error) {
+    console.error('[App] 验证登录状态失败:', error)
+    currentUser.value = null
+  } finally {
+    authLoading.value = false
+  }
 })
+
+onBeforeUnmount(() => {
+  window.removeEventListener('auth:unauthorized', handleUnauthorized)
+})
+
+async function handleAuthenticated(user) {
+  currentUser.value = user
+  authLoading.value = false
+  handleNewChat()
+  await loadSessions()
+}
+
+function handleUnauthorized() {
+  currentUser.value = null
+  handleNewChat()
+  sessions.value = []
+}
+
+async function handleLogout() {
+  try {
+    await logout()
+  } catch (error) {
+    console.error('[App] 退出登录失败:', error)
+  } finally {
+    handleUnauthorized()
+  }
+}
 
 // ============================================================
 // 会话管理
@@ -525,6 +580,27 @@ async function handleResume(resumeData) {
 </script>
 
 <style scoped>
+.auth-loading {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #64748b;
+  background: #f8fafc;
+}
+
+.auth-loading-mark {
+  width: 22px;
+  height: 22px;
+  border: 3px solid #bae6fd;
+  border-top-color: #0ea5e9;
+  border-radius: 50%;
+  animation: auth-spin .8s linear infinite;
+}
+
+@keyframes auth-spin { to { transform: rotate(360deg); } }
+
 .app-container {
   display: flex;
   height: 100vh;

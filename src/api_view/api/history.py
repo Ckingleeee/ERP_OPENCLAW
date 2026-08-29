@@ -9,7 +9,7 @@ import re
 from typing import Optional, Any, Dict, List
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from agent.schema import (
     Session,
@@ -19,6 +19,7 @@ from agent.schema import (
     Message,
 )
 from api_view.agent_loader import agent_loader
+from api_view.auth import CurrentUser, get_current_user
 
 
 # 创建路由
@@ -256,40 +257,30 @@ def serialize_messages_from_checkpoint(messages: list) -> list:
 @router.get("/history", response_model=SessionListResponse)
 async def get_sessions(
     page: int = Query(1, ge=1, description="页码"),
-    limit: int = Query(20, ge=1, le=100, description="每页数量")
+    limit: int = Query(20, ge=1, le=100, description="每页数量"),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     """获取会话列表"""
     try:
-        all_thread_ids = agent_loader.get_all_thread_ids()
+        session_documents = agent_loader.get_user_sessions(current_user.user_id)
 
         sessions = []
-        for thread_id in all_thread_ids:
+        for document in session_documents:
+            thread_id = document["thread_id"]
             try:
                 messages = await agent_loader.get_current_messages(thread_id)
+                title = document.get("title") or "新对话"
+                message_count = len(messages) // 2
+                updated_at = document.get("updated_at") or datetime.now()
+                created_at = document.get("created_at") or updated_at
 
-                if messages:
-                    first_user_msg = next(
-                        (m for m in messages if get_message_role(m) == "user"),
-                        None
-                    )
-                    if first_user_msg:
-                        first_content = get_message_content(first_user_msg)
-                        title = first_content[:50] if first_content else "新对话"
-                        if len(first_content) > 50:
-                            title += "..."
-                    else:
-                        title = "新对话"
-
-                    message_count = len(messages) // 2
-                    updated_at = agent_loader.get_session_updated_at(thread_id)
-
-                    sessions.append(Session(
-                        thread_id=thread_id,
-                        title=title,
-                        created_at=updated_at,
-                        updated_at=updated_at,
-                        message_count=message_count
-                    ))
+                sessions.append(Session(
+                    thread_id=thread_id,
+                    title=title,
+                    created_at=created_at,
+                    updated_at=updated_at,
+                    message_count=message_count
+                ))
             except Exception as e:
                 print(f"[HistoryAPI] 处理会话 {thread_id} 失败: {e}")
                 continue
@@ -314,13 +305,18 @@ async def get_sessions(
 
 
 @router.get("/history/{thread_id}/messages", response_model=SessionMessagesResponse)
-async def get_session_messages(thread_id: str):
+async def get_session_messages(
+    thread_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+):
     """
     获取会话消息历史
 
     优先从 MongoDB display_messages 集合读取（包含子代理消息），
     如不存在则回退到 checkpoint 序列化（兼容旧会话数据）。
     """
+    if not agent_loader.user_owns_session(thread_id, current_user.user_id):
+        raise HTTPException(status_code=404, detail="会话不存在")
     try:
         # 优先从 MongoDB 读取流式过程中保存的完整展示消息
         serialized = await agent_loader.get_display_messages(thread_id)
@@ -359,10 +355,13 @@ async def get_session_messages(thread_id: str):
 
 
 @router.delete("/history/{thread_id}", response_model=DeleteSessionResponse)
-async def delete_session(thread_id: str):
+async def delete_session(
+    thread_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+):
     """删除会话"""
     try:
-        success = await agent_loader.delete_session(thread_id)
+        success = await agent_loader.delete_session(thread_id, current_user.user_id)
 
         if success:
             return DeleteSessionResponse(success=True, message="会话已删除")
@@ -375,11 +374,20 @@ async def delete_session(thread_id: str):
 
 
 @router.patch("/history/{thread_id}")
-async def update_session_title(thread_id: str, title: str = Query(..., description="新的会话标题")):
+async def update_session_title(
+    thread_id: str,
+    title: str = Query(..., min_length=1, max_length=100, description="新的会话标题"),
+    current_user: CurrentUser = Depends(get_current_user),
+):
     """更新会话标题"""
+    updated = agent_loader.update_session_title(
+        thread_id, current_user.user_id, title
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="会话不存在")
     return {
         "success": True,
-        "message": "标题更新功能待实现",
+        "message": "会话标题已更新",
         "thread_id": thread_id,
         "title": title
     }

@@ -4,6 +4,8 @@
  * 提供流式对话、中断恢复和会话状态查询接口
  */
 
+import { apiFetch } from './http.js'
+
 const API_BASE = '/api/chat'
 
 /**
@@ -34,7 +36,7 @@ export async function streamChat(message, threadId = null, callbacks = {}, signa
 
   try {
     // 使用 fetch 发送 POST 请求，支持 AbortController
-    const response = await fetch(`${API_BASE}/stream`, {
+    const response = await apiFetch(`${API_BASE}/stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -90,7 +92,7 @@ export async function resumeChat(threadId, resumeData, callbacks = {}, signal = 
   let toolStack = []
 
   try {
-    const response = await fetch(`${API_BASE}/${threadId}/resume`, {
+    const response = await apiFetch(`${API_BASE}/${threadId}/resume`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -260,7 +262,7 @@ async function _processStream(response, threadId, callbacks, fullContent, toolCa
  * @returns {Promise} 返回会话状态对象
  */
 export async function getChatState(threadId) {
-  const response = await fetch(`${API_BASE}/${threadId}`)
+  const response = await apiFetch(`${API_BASE}/${threadId}`)
 
   if (!response.ok) {
     throw new Error('获取会话状态失败')
@@ -277,7 +279,7 @@ export async function getChatState(threadId) {
  * @returns {Promise} 返回状态历史列表
  */
 export async function getChatHistory(threadId, limit = 50) {
-  const response = await fetch(`${API_BASE}/${threadId}/history?limit=${limit}`)
+  const response = await apiFetch(`${API_BASE}/${threadId}/history?limit=${limit}`)
 
   if (!response.ok) {
     throw new Error('获取会话历史失败')

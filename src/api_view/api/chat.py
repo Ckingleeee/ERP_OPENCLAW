@@ -12,7 +12,7 @@ import tempfile
 from datetime import datetime
 from typing import AsyncIterator
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from langgraph.types import Command
 from pydantic import BaseModel
@@ -23,6 +23,7 @@ from agent.schema import (
     Message,
 )
 from api_view.agent_loader import agent_loader
+from api_view.auth import CurrentUser, get_current_user
 
 
 # 创建路由
@@ -218,7 +219,6 @@ class ResumeRequest(BaseModel):
     - HITL 审批中断: {"decisions": [{"type": "approve"}]} 或 [{"type": "reject"}]
     """
     resume: dict
-    user_id: str = "laoxiao"
 
 
 # ============================================================
@@ -229,7 +229,8 @@ async def stream_chat_response(
     message: str = None,
     thread_id: str = None,
     resume_data: dict = None,
-    user_id: str = "laoxiao",
+    user_id: str = None,
+    username: str = None,
 ) -> AsyncIterator[str]:
     """
     流式生成对话响应，支持 Human-in-the-Loop 中断与恢复。
@@ -243,7 +244,9 @@ async def stream_chat_response(
 
     同时累积完整的展示消息列表（包含子代理消息），在流结束后存入 MongoDB。
     """
-    context = {"user_id": user_id, "username": user_id}
+    if not user_id:
+        raise ValueError("authenticated user_id is required")
+    context = {"user_id": user_id, "username": username or user_id}
     config = agent_loader.create_config(thread_id, user_id=user_id)
 
     # 获取该用户的 per-user agent graph（沙箱缓存 + 预计算组件）
@@ -353,7 +356,9 @@ async def stream_chat_response(
 
                 # 保存部分展示消息到 MongoDB（中断前的消息状态）
                 # 注意：resume 模式下 display_messages 已含历史，保存时会覆盖旧记录
-                await agent_loader.save_display_messages(thread_id, cleaned)
+                await agent_loader.save_display_messages(
+                    thread_id, cleaned, user_id=user_id
+                )
                 write_debug_log(debug_log, "SAVE_DISPLAY_INTERRUPT", {
                     "thread_id": thread_id,
                     "message_count": len(cleaned),
@@ -545,7 +550,9 @@ async def stream_chat_response(
         else:
             # resume 模式：display_messages 已包含历史（load 时获取），直接保存
             all_messages = display_messages
-        await agent_loader.save_display_messages(thread_id, all_messages)
+        await agent_loader.save_display_messages(
+            thread_id, all_messages, user_id=user_id
+        )
         write_debug_log(debug_log, "SAVE_DISPLAY", {
             "thread_id": thread_id,
             "total_count": len(all_messages)
@@ -576,7 +583,10 @@ async def stream_chat_response(
 # ============================================================
 
 @router.post("/chat/stream")
-async def chat_stream(request: ChatRequest):
+async def chat_stream(
+    request: ChatRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+):
     """
     流式对话接口
 
@@ -585,10 +595,26 @@ async def chat_stream(request: ChatRequest):
     检测到 Human-in-the-Loop 中断时会发送 interrupt 事件
     """
     thread_id = request.thread_id or str(uuid.uuid4())
-    user_id = request.user_id
+    try:
+        agent_loader.claim_session(
+            thread_id,
+            current_user.user_id,
+            current_user.display_name,
+            title=request.message[:50],
+        )
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="无权访问该会话",
+        ) from exc
 
     return StreamingResponse(
-        stream_chat_response(message=request.message, thread_id=thread_id, user_id=user_id),
+        stream_chat_response(
+            message=request.message,
+            thread_id=thread_id,
+            user_id=current_user.user_id,
+            username=current_user.display_name,
+        ),
         media_type="text/event-stream",  # text/json, text/html, image/jpg
         headers={
             "Cache-Control": "no-cache",
@@ -599,7 +625,11 @@ async def chat_stream(request: ChatRequest):
 
 
 @router.post("/chat/{thread_id}/resume")
-async def chat_resume(thread_id: str, request: ResumeRequest):
+async def chat_resume(
+    thread_id: str,
+    request: ResumeRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+):
     """
     中断恢复接口
 
@@ -608,8 +638,18 @@ async def chat_resume(thread_id: str, request: ResumeRequest):
     - 数据补充: {"supplement": "用户输入的补充信息"}
     - HITL 审批: {"decisions": [{"type": "approve"}]} 或 [{"type": "reject"}]
     """
+    if not agent_loader.user_owns_session(thread_id, current_user.user_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="会话不存在",
+        )
     return StreamingResponse(
-        stream_chat_response(thread_id=thread_id, resume_data=request.resume, user_id=request.user_id),
+        stream_chat_response(
+            thread_id=thread_id,
+            resume_data=request.resume,
+            user_id=current_user.user_id,
+            username=current_user.display_name,
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -620,8 +660,13 @@ async def chat_resume(thread_id: str, request: ResumeRequest):
 
 
 @router.get("/chat/{thread_id}")
-async def get_chat_state(thread_id: str):
+async def get_chat_state(
+    thread_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+):
     """获取会话状态"""
+    if not agent_loader.user_owns_session(thread_id, current_user.user_id):
+        raise HTTPException(status_code=404, detail="会话不存在")
     try:
         messages = await agent_loader.get_current_messages(thread_id)
 
@@ -649,9 +694,12 @@ async def get_chat_state(thread_id: str):
 @router.get("/chat/{thread_id}/history")
 async def get_chat_history(
     thread_id: str,
-    limit: int = Query(50, ge=1, le=100)
+    limit: int = Query(50, ge=1, le=100),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     """获取会话历史状态列表"""
+    if not agent_loader.user_owns_session(thread_id, current_user.user_id):
+        raise HTTPException(status_code=404, detail="会话不存在")
     try:
         states = await agent_loader.get_state_history(thread_id, limit)
 

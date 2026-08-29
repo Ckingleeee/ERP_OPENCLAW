@@ -6,6 +6,12 @@
 import os
 from pathlib import Path
 
+
+def _as_bool(value: str | None, *, default: bool) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
 # ============================================================
 # MongoDB 配置 - 用于存储 Agent 的短期记忆（checkpoint）
 # ============================================================
@@ -21,6 +27,28 @@ MONGODB_CHECKPOINT_COLLECTION = os.getenv(
     "MONGODB_CHECKPOINT_COLLECTION",
     "checkpoints",
 )
+
+# ============================================================
+# 登录认证配置
+# ============================================================
+AUTH_JWT_SECRET = os.getenv("AUTH_JWT_SECRET", "")
+AUTH_ISSUER = os.getenv("AUTH_ISSUER", "erp-procurement-agent")
+AUTH_TOKEN_EXPIRE_MINUTES = int(os.getenv("AUTH_TOKEN_EXPIRE_MINUTES", "480"))
+AUTH_COOKIE_NAME = os.getenv("AUTH_COOKIE_NAME", "erp_session")
+AUTH_COOKIE_SECURE = _as_bool(
+    os.getenv("AUTH_COOKIE_SECURE"), default=False
+)
+AUTH_COOKIE_SAMESITE = os.getenv("AUTH_COOKIE_SAMESITE", "lax").lower()
+if AUTH_COOKIE_SAMESITE not in {"lax", "strict", "none"}:
+    raise ValueError("AUTH_COOKIE_SAMESITE must be lax, strict, or none")
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000",
+    ).split(",")
+    if origin.strip()
+]
 
 # ============================================================
 # 项目路径配置
@@ -43,8 +71,8 @@ AGENTS_MD_PATH = PROJECT_DIR / "src" / "AGENTS.md"
 # 服务配置
 # ============================================================
 # API 服务标题
-API_TITLE = "DeepAgent Chat API"
+API_TITLE = "智能采购助手ERP API"
 # API 版本
 API_VERSION = "1.0.0"
 # API 描述
-API_DESCRIPTION = "基于 DeepAgent 的 AI 对话系统 API"
+API_DESCRIPTION = "智能采购平台的多智能体业务 API"

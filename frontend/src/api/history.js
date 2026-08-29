@@ -4,6 +4,8 @@
  * 提供会话列表查询、会话消息获取和会话删除接口
  */
 
+import { apiFetch } from './http.js'
+
 const API_BASE = '/api/history'
 
 /**
@@ -14,7 +16,7 @@ const API_BASE = '/api/history'
  * @returns {Promise} 返回会话列表响应 { sessions, total, page, limit }
  */
 export async function getSessions(page = 1, limit = 20) {
-  const response = await fetch(`${API_BASE}?page=${page}&limit=${limit}`)
+  const response = await apiFetch(`${API_BASE}?page=${page}&limit=${limit}`)
 
   if (!response.ok) {
     throw new Error('获取会话列表失败')
@@ -30,7 +32,7 @@ export async function getSessions(page = 1, limit = 20) {
  * @returns {Promise} 返回会话消息响应 { thread_id, messages }
  */
 export async function getMessages(threadId) {
-  const response = await fetch(`${API_BASE}/${threadId}/messages`)
+  const response = await apiFetch(`${API_BASE}/${threadId}/messages`)
 
   if (!response.ok) {
     throw new Error('获取会话消息失败')
@@ -46,7 +48,7 @@ export async function getMessages(threadId) {
  * @returns {Promise} 返回删除结果 { success, message }
  */
 export async function deleteSession(threadId) {
-  const response = await fetch(`${API_BASE}/${threadId}`, {
+  const response = await apiFetch(`${API_BASE}/${threadId}`, {
     method: 'DELETE'
   })
 
@@ -67,7 +69,7 @@ export async function deleteSession(threadId) {
  * @returns {Promise} 返回更新结果
  */
 export async function updateSessionTitle(threadId, title) {
-  const response = await fetch(`${API_BASE}/${threadId}?title=${encodeURIComponent(title)}`, {
+  const response = await apiFetch(`${API_BASE}/${threadId}?title=${encodeURIComponent(title)}`, {
     method: 'PATCH'
   })
 
