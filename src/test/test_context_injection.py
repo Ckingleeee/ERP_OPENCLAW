@@ -11,7 +11,13 @@ from agent.middlewares.context_injection import (
 )
 from api_view.message_visibility import (
     is_internal_stream_message,
+    sanitize_legacy_assistant_content,
     strip_internal_context_prefix,
+)
+from agent.internal_messages import (
+    INTERNAL_MEMORY_MODEL_NAME,
+    INTERNAL_MEMORY_TAG,
+    INTERNAL_MODEL_METADATA_KEY,
 )
 
 
@@ -55,6 +61,18 @@ class ContextInjectionTests(unittest.TestCase):
         self.assertTrue(is_internal_stream_message(internal))
         self.assertTrue(is_internal_stream_message(HumanMessage(content="hello")))
         self.assertFalse(is_internal_stream_message(AIMessage(content="answer")))
+        self.assertTrue(
+            is_internal_stream_message(
+                AIMessage(content='{"suppliers": [], "query": "internal"}'),
+                {"tags": [INTERNAL_MEMORY_TAG]},
+            )
+        )
+        self.assertTrue(
+            is_internal_stream_message(
+                AIMessage(content="internal"),
+                {INTERNAL_MODEL_METADATA_KEY: INTERNAL_MEMORY_MODEL_NAME},
+            )
+        )
 
     def test_legacy_context_is_removed_without_losing_answer(self):
         leaked = (
@@ -72,6 +90,24 @@ class ContextInjectionTests(unittest.TestCase):
             "这是用户真正应该看到的回答。",
         )
         self.assertEqual(strip_internal_context_prefix("正常回答"), "正常回答")
+
+    def test_legacy_memory_json_is_removed_without_losing_answer(self):
+        leaked = (
+            "请补充需要采购的具体物料。\n"
+            '{"suppliers": [], "query": '
+            '"用户表示需要采购，但未说明具体物料或需求"}'
+        )
+
+        self.assertEqual(
+            sanitize_legacy_assistant_content(leaked),
+            "请补充需要采购的具体物料。",
+        )
+        self.assertEqual(
+            sanitize_legacy_assistant_content(
+                '{"code": 200, "message": "正常业务 JSON"}'
+            ),
+            '{"code": 200, "message": "正常业务 JSON"}',
+        )
 
 
 if __name__ == "__main__":
