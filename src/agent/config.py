@@ -60,7 +60,9 @@ FALLBACK_MODEL = init_chat_model(
 # ---------- 沙箱配置 ----------
 # OpenSandbox 沙箱配置连接
 SANDBOX_CONFIG = ConnectionConfigSync(
-    domain="http://39.100.100.28:8080",
+    domain=os.getenv("OPEN_SANDBOX_DOMAIN",
+                     "https://127.0.0.1:18080"),
+    api_key=os.getenv("OPEN_SANDBOX_API_KEY"),
     use_server_proxy=True,
     request_timeout=timedelta(seconds=60),
     transport=httpx.HTTPTransport(limits=httpx.Limits(max_connections=20)),
@@ -107,9 +109,13 @@ SCOPE_MAP = {
 # ---------- 中间件参数 ----------
 
 # ---------- MongoDB 配置（用于持久化 Agent 短期记忆/checkpoint） ----------
-MONGODB_URI = "mongodb://root:123456@39.100.100.28:27017/?authSource=admin"
-MONGODB_DB_NAME = "langchain_db"
-MONGODB_CHECKPOINT_COLLECTION = "checkpoints"
+MONGODB_URI = os.getenv("MONGODB_URI",
+                        "mongodb://127.0.0.1:27017/langchain_db",
+                        )
+MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "langchain_db")
+MONGODB_CHECKPOINT_COLLECTION = os.getenv("MONGODB_CHECKPOINT_COLLECTION",
+                                          "checkpoints",
+                                          )
 
 # ---------- 持久化存储 ----------
 # InMemoryStore: 开发阶段使用。生产环境替换为持久 Store。
