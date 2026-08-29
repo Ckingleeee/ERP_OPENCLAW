@@ -10,13 +10,14 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 # 将项目根目录添加到 Python 路径
 PROJECT_DIR = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_DIR))
 
 from pymongo import MongoClient
+from pymongo.errors import DuplicateKeyError
 
 from api_view.web_config import (
     MONGODB_URI,
@@ -27,6 +28,9 @@ from api_view.web_config import (
 from agent.main_agent import create_main_agent, precompute_agent_context, PrecomputedContext
 from agent.backends import sandbox_manager
 from agent.config import CHECKPOINTER
+
+
+SESSION_COLLECTION = "session_registry"
 
 
 # CheckpointTuple 到 StateSnapshot 的轻量适配器
@@ -78,6 +82,11 @@ class AgentLoader:
 
             # 2. 沙箱管理器初始化（MongoDB 连接 + 索引）
             await sandbox_manager.initialize(self._mongodb_client)
+
+            # 2.1 会话所有权索引，用于多用户数据隔离。
+            session_collection = self._mongodb_client[MONGODB_DB_NAME][SESSION_COLLECTION]
+            session_collection.create_index("thread_id", unique=True)
+            session_collection.create_index([("user_id", 1), ("updated_at", -1)])
 
             # 3. 预计算 MCP 工具 + 图表工具 + YAML 配置
             self._precomputed = await precompute_agent_context()
@@ -156,10 +165,81 @@ class AgentLoader:
         return {
             "configurable": {
                 "thread_id": thread_id or str(uuid.uuid4()),
-                "user_id": user_id or "laoxiao",
-                **kwargs
+                **({"user_id": user_id} if user_id else {}),
+                **kwargs,
             }
         }
+
+    def _session_collection(self):
+        if self._mongodb_client is None:
+            raise RuntimeError("AgentLoader 尚未初始化")
+        return self._mongodb_client[MONGODB_DB_NAME][SESSION_COLLECTION]
+
+    def claim_session(
+        self,
+        thread_id: str,
+        user_id: str,
+        username: str,
+        *,
+        title: str | None = None,
+    ) -> None:
+        """Create a session owner record or verify the existing owner."""
+        collection = self._session_collection()
+        existing = collection.find_one({"thread_id": thread_id})
+        if existing is not None:
+            if existing.get("user_id") != user_id:
+                raise PermissionError("session belongs to another user")
+            collection.update_one(
+                {"thread_id": thread_id},
+                {"$set": {
+                    "username": username,
+                    "updated_at": datetime.now(timezone.utc),
+                }},
+            )
+            return
+
+        now = datetime.now(timezone.utc)
+        document = {
+            "thread_id": thread_id,
+            "user_id": user_id,
+            "username": username,
+            "title": (title or "新对话").strip()[:50] or "新对话",
+            "created_at": now,
+            "updated_at": now,
+        }
+        try:
+            collection.insert_one(document)
+        except DuplicateKeyError:
+            existing = collection.find_one({"thread_id": thread_id})
+            if existing is None or existing.get("user_id") != user_id:
+                raise PermissionError("session belongs to another user")
+
+    def user_owns_session(self, thread_id: str, user_id: str) -> bool:
+        return self._session_collection().count_documents(
+            {"thread_id": thread_id, "user_id": user_id}, limit=1
+        ) == 1
+
+    def get_user_sessions(self, user_id: str) -> list[dict]:
+        cursor = self._session_collection().find(
+            {"user_id": user_id}
+        ).sort("updated_at", -1)
+        return list(cursor)
+
+    def update_session_title(self, thread_id: str, user_id: str, title: str) -> bool:
+        result = self._session_collection().update_one(
+            {"thread_id": thread_id, "user_id": user_id},
+            {"$set": {
+                "title": title.strip()[:100],
+                "updated_at": datetime.now(timezone.utc),
+            }},
+        )
+        return result.matched_count == 1
+
+    def touch_session(self, thread_id: str, user_id: str) -> None:
+        self._session_collection().update_one(
+            {"thread_id": thread_id, "user_id": user_id},
+            {"$set": {"updated_at": datetime.now(timezone.utc)}},
+        )
 
     async def get_state_history(
         self,
@@ -190,15 +270,10 @@ class AgentLoader:
             print(f"[AgentLoader] 获取消息失败: {e}")
         return []
 
-    def get_all_thread_ids(self) -> List[str]:
-        if self._mongodb_client is None:
-            return []
-        db = self._mongodb_client[MONGODB_DB_NAME]
-        collection = db[MONGODB_CHECKPOINT_COLLECTION]
-        thread_ids = collection.distinct("thread_id")
-        return [tid for tid in thread_ids if tid and tid != "*" and tid != "" and tid is not None]
-
     def get_session_updated_at(self, thread_id: str) -> datetime:
+        session = self._session_collection().find_one({"thread_id": thread_id})
+        if session and session.get("updated_at"):
+            return session["updated_at"]
         if self._mongodb_client is None:
             return datetime.now()
         db = self._mongodb_client[MONGODB_DB_NAME]
@@ -220,8 +295,10 @@ class AgentLoader:
             print(f"[AgentLoader] 获取会话时间失败: {e}")
             return datetime.now()
 
-    async def delete_session(self, thread_id: str) -> bool:
+    async def delete_session(self, thread_id: str, user_id: str) -> bool:
         if self._mongodb_client is None:
+            return False
+        if not self.user_owns_session(thread_id, user_id):
             return False
         db = self._mongodb_client[MONGODB_DB_NAME]
         collection = db[MONGODB_CHECKPOINT_COLLECTION]
@@ -229,6 +306,9 @@ class AgentLoader:
             result = collection.delete_many({"thread_id": thread_id})
             display_collection = db["session_display_messages"]
             display_result = display_collection.delete_many({"thread_id": thread_id})
+            self._session_collection().delete_one(
+                {"thread_id": thread_id, "user_id": user_id}
+            )
             print(f"[AgentLoader] 已删除会话 {thread_id}，checkpoint {result.deleted_count} 条，展示消息 {display_result.deleted_count} 条")
             return True
         except Exception as e:
@@ -248,7 +328,12 @@ class AgentLoader:
                 msg[field] = msg[field][:cls._MAX_FIELD_LENGTH] + "\n\n...(内容过长已截断)"
         return msg
 
-    async def save_display_messages(self, thread_id: str, messages: List[Dict[str, Any]]) -> bool:
+    async def save_display_messages(
+        self,
+        thread_id: str,
+        messages: List[Dict[str, Any]],
+        user_id: str | None = None,
+    ) -> bool:
         if self._mongodb_client is None:
             return False
         try:
@@ -272,6 +357,8 @@ class AgentLoader:
                     })
                 collection.insert_many(docs)
                 print(f"[AgentLoader] 已保存 {len(docs)} 条展示消息，thread_id={thread_id}")
+            if user_id:
+                self.touch_session(thread_id, user_id)
             return True
         except Exception as e:
             print(f"[AgentLoader] 保存展示消息失败: {e}")

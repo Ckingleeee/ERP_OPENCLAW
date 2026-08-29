@@ -50,7 +50,6 @@ class ChatRequest(BaseModel):
     """对话请求模型"""
     message: str = Field(..., description="用户消息")
     thread_id: Optional[str] = Field(None, description="会话 ID，为空则创建新会话")
-    user_id: str = Field("laoxiao", description="用户唯一标识")
 
 
 class Message(BaseModel):

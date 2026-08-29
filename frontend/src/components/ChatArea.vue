@@ -4,25 +4,25 @@
     <div class="message-list" ref="messageListRef">
       <!-- 空状态 -->
       <div v-if="displayMessages.length === 0" class="empty-state">
-        <div class="empty-icon"><img src="https://www-static.mashibing.com/_nuxt/img/logo.69f6ec8.svg" alt="logo" /></div>
-        <h2>基于Harness Engineering的智能助手</h2>
-        <p>我是你的 AI 助手，可以帮助你完成各种任务</p>
+        <div class="empty-icon"><img :src="logoUrl" alt="智能采购平台" /></div>
+        <h2>智能采购助手ERP</h2>
+        <p>连接 ERP 数据、采购分析和受控订单操作的一体化智能采购平台</p>
         <div class="feature-list">
           <div class="feature-item">
             <span class="feature-icon">📊</span>
-            <span>数据分析和图表生成</span>
+            <span>供应商与采购数据分析</span>
           </div>
           <div class="feature-item">
             <span class="feature-icon">🔍</span>
-            <span>网络搜索和信息查询</span>
+            <span>零部件、库存与订单查询</span>
           </div>
           <div class="feature-item">
             <span class="feature-icon">💻</span>
-            <span>代码编写和调试</span>
+            <span>市场信息搜索与采购建议</span>
           </div>
           <div class="feature-item">
             <span class="feature-icon">📝</span>
-            <span>文档处理和写作</span>
+            <span>人工审批后的订单操作</span>
           </div>
         </div>
       </div>
@@ -43,6 +43,7 @@
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
 import MessageItem from './MessageItem.vue'
+import logoUrl from '../assets/logo.svg'
 
 /**
  * 对话区域组件

@@ -9,9 +9,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api_view.web_config import API_TITLE, API_VERSION, API_DESCRIPTION
-from api_view.api import chat, history
+from api_view.web_config import (
+    API_DESCRIPTION,
+    API_TITLE,
+    API_VERSION,
+    CORS_ALLOWED_ORIGINS,
+)
+from api_view.api import auth, chat, history
 from api_view.agent_loader import agent_loader
+from api_view.auth import validate_auth_config
 
 
 @asynccontextmanager
@@ -27,6 +33,9 @@ async def lifespan(app: FastAPI):
     print("=" * 50)
     print("正在启动 DeepAgent Chat API...")
     print("=" * 50)
+
+    # 登录 Cookie 必须使用部署环境提供的高强度密钥签名。
+    validate_auth_config()
 
     # 初始化 Agent
     await agent_loader.initialize()
@@ -65,7 +74,7 @@ app = FastAPI(
 # 允许跨域请求，方便前端开发
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 生产环境建议限制为具体的前端域名
+    allow_origins=CORS_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -79,6 +88,8 @@ app.add_middleware(
 app.include_router(chat.router, prefix="/api", tags=["对话"])
 # 历史记录相关接口
 app.include_router(history.router, prefix="/api", tags=["历史记录"])
+# 登录认证接口
+app.include_router(auth.router, prefix="/api", tags=["认证"])
 
 
 # ============================================================
@@ -94,7 +105,7 @@ async def root():
     return {
         "name": API_TITLE,
         "version": API_VERSION,
-        "description": "基于 DeepAgent 的 AI 对话系统 API",
+        "description": API_DESCRIPTION,
         "docs": "/docs",
         "redoc": "/redoc"
     }

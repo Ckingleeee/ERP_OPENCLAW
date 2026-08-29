@@ -52,8 +52,8 @@ def setup_sandbox(config, sandbox_id=None, image=None) -> OpenSandboxBackend:
             image,
             entrypoint=["/opt/opensandbox/code-interpreter.sh"],
             env={"PYTHON_VERSION": "3.11"},
-            resource={"cpu": "2", "memory": "4Gi"},
-            timeout=timedelta(hours=2),
+            resource={"cpu": "1", "memory": "2Gi"},
+            timeout=timedelta(hours=1),
             connection_config=config,
             # network_policy=NetworkPolicy(  # 沙箱网络路由限制策略
             #     defaultAction="deny",

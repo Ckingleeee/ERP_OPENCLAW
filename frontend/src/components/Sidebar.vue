@@ -3,7 +3,11 @@
     <!-- 侧边栏头部 -->
     <div class="sidebar-header">
       <div class="logo">
-        <img class="logo-icon" src="https://www-static.mashibing.com/_nuxt/img/logo.69f6ec8.svg" alt="logo" />
+        <img class="logo-icon" :src="logoUrl" alt="智能采购平台" />
+        <div class="logo-copy">
+          <strong>智能采购平台</strong>
+          <span>智能采购助手ERP</span>
+        </div>
       </div>
       <button class="new-chat-btn" @click="$emit('new-chat')">
         <span class="icon">+</span>
@@ -58,6 +62,14 @@
 
     <!-- 侧边栏底部 -->
     <div class="sidebar-footer">
+      <div class="current-user">
+        <div class="user-avatar">{{ userInitial }}</div>
+        <div class="user-copy">
+          <strong>{{ currentUser?.display_name || currentUser?.username }}</strong>
+          <span>{{ currentUser?.department || currentUser?.role }}</span>
+        </div>
+        <button class="logout-btn" title="退出登录" @click="$emit('logout')">退出</button>
+      </div>
       <div class="footer-info">
         <span class="version">v1.0.0</span>
       </div>
@@ -67,6 +79,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import logoUrl from '../assets/logo.svg'
 
 // Props 定义
 const props = defineProps({
@@ -77,14 +90,23 @@ const props = defineProps({
   currentThreadId: {
     type: String,
     default: null
+  },
+  currentUser: {
+    type: Object,
+    default: null
   }
 })
 
 // Emits 定义
-const emit = defineEmits(['select-session', 'new-chat', 'delete-session'])
+const emit = defineEmits(['select-session', 'new-chat', 'delete-session', 'logout'])
 
 // 搜索关键词
 const searchKeyword = ref('')
+
+const userInitial = computed(() => {
+  const name = props.currentUser?.display_name || props.currentUser?.username || 'U'
+  return name.slice(0, 1).toUpperCase()
+})
 
 // 过滤后的会话列表
 const filteredSessions = computed(() => {
@@ -158,19 +180,13 @@ function handleDelete(threadId) {
 }
 
 .logo-icon {
-  height: 60px;
-  width: auto;
+  height: 46px;
+  width: 46px;
 }
 
-.logo-text {
-  font-size: 20px;
-  font-weight: 700;
-  background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  letter-spacing: 0.5px;
-}
+.logo-copy { min-width: 0; display: grid; gap: 2px; }
+.logo-copy strong { color: #0f172a; font-size: 16px; }
+.logo-copy span { color: #64748b; font-size: 11px; }
 
 .new-chat-btn {
   width: 100%;
@@ -360,6 +376,30 @@ function handleDelete(threadId) {
   border-top: 1px solid #f1f5f9;
   background: #fafafa;
 }
+
+.current-user { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 11px;
+  color: white;
+  font-weight: 700;
+  background: linear-gradient(135deg, #0ea5e9, #6366f1);
+}
+.user-copy { min-width: 0; flex: 1; display: grid; }
+.user-copy strong { overflow: hidden; color: #1e293b; font-size: 13px; text-overflow: ellipsis; }
+.user-copy span { color: #94a3b8; font-size: 11px; }
+.logout-btn {
+  border: 0;
+  color: #64748b;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+}
+.logout-btn:hover { color: #dc2626; }
 
 .footer-info {
   display: flex;

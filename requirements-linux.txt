@@ -1,5 +1,4 @@
-# Editable install with no version control (agent==0.0.1)
--e e:\my_project\project30
+﻿# Editable install with no version control (agent==0.0.1)
 aiofile==3.9.0
 aiohappyeyeballs==2.6.1
 aiohttp==3.13.5
@@ -120,8 +119,6 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 python-multipart==0.0.22
 python-ulid==3.1.0
-pywin32==311
-pywin32-ctypes==0.2.3
 PyYAML==6.0.3
 redis==7.4.0
 redisvl==0.16.0
@@ -152,7 +149,6 @@ watchfiles==1.1.1
 wcmatch==10.1
 websocket-client==1.9.0
 websockets==16.0
-win32_setctime==1.2.0
 xxhash==3.6.0
 yarl==1.23.0
 zipp==3.23.0

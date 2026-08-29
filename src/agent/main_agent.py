@@ -183,7 +183,7 @@ async def create_main_agent(
             routes={
                 "/memories/": StoreBackend(
                     runtime=runtime,
-                    namespace=lambda rt: (getattr(rt.runtime.context, 'user_id', 'laoxiao'),),
+                    namespace=lambda rt: (rt.runtime.context.user_id,),
                 ),
                 "/persisted-skills/": StoreBackend(
                     runtime=runtime,
