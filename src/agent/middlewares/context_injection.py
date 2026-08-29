@@ -20,6 +20,31 @@ from langchain_core.messages import SystemMessage
 
 logger = logging.getLogger(__name__)
 
+INTERNAL_CONTEXT_MARKER = "erp_internal_user_context"
+
+
+def _message_has_user_context(message: Any, user_id: str) -> bool:
+    """Return whether a persisted message already contains this user's context."""
+    if isinstance(message, dict):
+        message_type = message.get("type") or message.get("role")
+        content = message.get("content", "")
+        additional_kwargs = message.get("additional_kwargs") or {}
+    else:
+        message_type = getattr(message, "type", None)
+        content = getattr(message, "content", "")
+        additional_kwargs = getattr(message, "additional_kwargs", {}) or {}
+
+    if additional_kwargs.get(INTERNAL_CONTEXT_MARKER) == user_id:
+        return True
+
+    # 兼容修复前已经写入 checkpoint、尚未携带 marker 的旧系统消息。
+    return (
+        str(message_type).lower().startswith("system")
+        and isinstance(content, str)
+        and content.startswith("【系统上下文】")
+        and f"当前用户 user_id: {user_id}\n" in content
+    )
+
 
 class ContextInjectionMiddleware(AgentMiddleware):
     """将 runtime.context 中的 user_id/username 注入到对话开头。"""
@@ -38,6 +63,16 @@ class ContextInjectionMiddleware(AgentMiddleware):
             return None
         username = getattr(ctx, "username", None) or user_id
 
+        if any(
+            _message_has_user_context(message, user_id)
+            for message in state.get("messages", [])
+        ):
+            logger.debug(
+                "ContextInjectionMiddleware: 用户上下文已存在，跳过重复注入 user_id=%s",
+                user_id,
+            )
+            return None
+
         logger.info(f"ContextInjectionMiddleware: 注入用户上下文 user_id={user_id}, username={username}")
 
         notice = (
@@ -48,7 +83,14 @@ class ContextInjectionMiddleware(AgentMiddleware):
             f"\n请首先使用 read_file 读取上述偏好文件了解用户偏好。"
             f"\n（recent_suppliers 和 recent_queries 由系统自动维护，你无需手动更新）"
         )
-        return {"messages": [SystemMessage(content=notice)]}
+        return {
+            "messages": [
+                SystemMessage(
+                    content=notice,
+                    additional_kwargs={INTERNAL_CONTEXT_MARKER: user_id},
+                )
+            ]
+        }
 
     async def abefore_agent(
         self, state: Dict[str, Any], runtime: Any
