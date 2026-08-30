@@ -13,6 +13,10 @@ from jwt import InvalidTokenError
 
 from api_view.web_config import (
     AUTH_COOKIE_NAME,
+    AUTH_DEMO_DEPARTMENT,
+    AUTH_DEMO_DISPLAY_NAME,
+    AUTH_DEMO_MODE,
+    AUTH_DEMO_ROLE,
     AUTH_ISSUER,
     AUTH_JWT_SECRET,
     AUTH_TOKEN_EXPIRE_MINUTES,
@@ -29,6 +33,7 @@ class CurrentUser:
     display_name: str
     role: str
     department: str | None = None
+    is_demo: bool = False
 
     def public_dict(self) -> dict:
         return asdict(self)
@@ -45,6 +50,24 @@ def _require_secret() -> str:
 def validate_auth_config() -> None:
     """Fail startup early when secure session signing is not configured."""
     _require_secret()
+
+
+def demo_mode_enabled() -> bool:
+    """Return whether passwordless, per-browser demo sessions are enabled."""
+    return AUTH_DEMO_MODE
+
+
+def create_demo_user() -> CurrentUser:
+    """Create an isolated anonymous identity for one demo browser."""
+    visitor_id = f"demo-{secrets.token_urlsafe(12)}"
+    return CurrentUser(
+        user_id=visitor_id,
+        username=visitor_id,
+        display_name=AUTH_DEMO_DISPLAY_NAME,
+        role=AUTH_DEMO_ROLE,
+        department=AUTH_DEMO_DEPARTMENT,
+        is_demo=True,
+    )
 
 
 def find_active_user(username: str) -> dict | None:
@@ -95,6 +118,8 @@ def create_session_token(user: CurrentUser) -> str:
         "username": user.username,
         "name": user.display_name,
         "role": user.role,
+        "department": user.department,
+        "demo": user.is_demo,
         "iss": AUTH_ISSUER,
         "iat": now,
         "exp": now + timedelta(minutes=AUTH_TOKEN_EXPIRE_MINUTES),
@@ -141,6 +166,29 @@ def get_current_user(request: Request) -> CurrentUser:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="登录状态无效或已过期",
         ) from exc
+
+    if payload.get("demo") is True:
+        if not demo_mode_enabled():
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="演示模式已关闭，请重新登录",
+            )
+        user_id = str(payload.get("sub") or "").strip()
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="演示登录状态无效",
+            )
+        return CurrentUser(
+            user_id=user_id,
+            username=str(payload.get("username") or user_id),
+            display_name=str(payload.get("name") or AUTH_DEMO_DISPLAY_NAME),
+            role=str(payload.get("role") or AUTH_DEMO_ROLE),
+            department=str(
+                payload.get("department") or AUTH_DEMO_DEPARTMENT
+            ),
+            is_demo=True,
+        )
 
     row = find_active_user(str(payload["sub"]))
     if row is None:

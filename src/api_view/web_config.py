@@ -41,6 +41,14 @@ AUTH_COOKIE_SECURE = _as_bool(
 AUTH_COOKIE_SAMESITE = os.getenv("AUTH_COOKIE_SAMESITE", "lax").lower()
 if AUTH_COOKIE_SAMESITE not in {"lax", "strict", "none"}:
     raise ValueError("AUTH_COOKIE_SAMESITE must be lax, strict, or none")
+AUTH_DEMO_MODE = _as_bool(os.getenv("AUTH_DEMO_MODE"), default=False)
+AUTH_DEMO_DISPLAY_NAME = (
+    os.getenv("AUTH_DEMO_DISPLAY_NAME", "演示用户").strip() or "演示用户"
+)
+AUTH_DEMO_ROLE = os.getenv("AUTH_DEMO_ROLE", "demo").strip() or "demo"
+AUTH_DEMO_DEPARTMENT = (
+    os.getenv("AUTH_DEMO_DEPARTMENT", "公开演示").strip() or "公开演示"
+)
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(

@@ -68,7 +68,12 @@
           <strong>{{ currentUser?.display_name || currentUser?.username }}</strong>
           <span>{{ currentUser?.department || currentUser?.role }}</span>
         </div>
-        <button class="logout-btn" title="退出登录" @click="$emit('logout')">退出</button>
+        <button
+          v-if="!currentUser?.is_demo"
+          class="logout-btn"
+          title="退出登录"
+          @click="$emit('logout')"
+        >退出</button>
       </div>
       <div class="footer-info">
         <span class="version">v1.0.0</span>

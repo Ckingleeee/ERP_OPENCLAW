@@ -53,7 +53,7 @@ import { login } from '../api/auth.js'
 import logoUrl from '../assets/logo.svg'
 
 const emit = defineEmits(['authenticated'])
-const username = ref('yyf')
+const username = ref('')
 const password = ref('')
 const submitting = ref(false)
 const errorMessage = ref('')

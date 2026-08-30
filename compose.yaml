@@ -5,13 +5,19 @@ x-backend-image: &backend-image
   build:
     context: .
     dockerfile: Dockerfile
+    args:
+      PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-python:3.12-slim}
+      APT_MIRROR: ${APT_MIRROR:-}
+      APT_SECURITY_MIRROR: ${APT_SECURITY_MIRROR:-}
+      PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+      PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
   restart: unless-stopped
   networks:
     - backend
 
 services:
   mysql:
-    image: mysql:8.4
+    image: ${MYSQL_IMAGE:-mysql:8.4}
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?configure MYSQL_ROOT_PASSWORD in .env}
@@ -32,7 +38,7 @@ services:
       - backend
 
   mongodb:
-    image: mongo:8.0
+    image: ${MONGODB_IMAGE:-mongo:8.0}
     restart: unless-stopped
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-mongo_root}
@@ -174,6 +180,8 @@ services:
       ALIBABA_SEARCH_MODEL: ${ALIBABA_SEARCH_MODEL:-qwen-plus}
       OPEN_SANDBOX_DOMAIN: ${OPEN_SANDBOX_DOMAIN:-http://host.docker.internal:18080}
       OPEN_SANDBOX_API_KEY: ${OPEN_SANDBOX_API_KEY:-}
+      OPEN_SANDBOX_IMAGE: ${OPEN_SANDBOX_IMAGE:-sandbox-registry.cn-zhangjiakou.cr.aliyuncs.com/opensandbox/code-interpreter:v1.0.2}
+      SANDBOX_PIP_INDEX_URL: ${SANDBOX_PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
       ANALYSIS_MCP_URL: ${ANALYSIS_MCP_URL:-}
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?configure AUTH_JWT_SECRET in .env}
       AUTH_ISSUER: ${AUTH_ISSUER:-erp-procurement-agent}
@@ -181,6 +189,10 @@ services:
       AUTH_COOKIE_NAME: ${AUTH_COOKIE_NAME:-erp_session}
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
       AUTH_COOKIE_SAMESITE: ${AUTH_COOKIE_SAMESITE:-lax}
+      AUTH_DEMO_MODE: ${AUTH_DEMO_MODE:-false}
+      AUTH_DEMO_DISPLAY_NAME: ${AUTH_DEMO_DISPLAY_NAME:-演示用户}
+      AUTH_DEMO_ROLE: ${AUTH_DEMO_ROLE:-demo}
+      AUTH_DEMO_DEPARTMENT: ${AUTH_DEMO_DEPARTMENT:-公开演示}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost}
     extra_hosts:
       - host.docker.internal:host-gateway
@@ -216,6 +228,10 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      args:
+        NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-node:22-alpine}
+        NGINX_BASE_IMAGE: ${NGINX_BASE_IMAGE:-nginx:1.27-alpine}
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
     restart: unless-stopped
     ports:
       - ${HTTP_PORT:-80}:80

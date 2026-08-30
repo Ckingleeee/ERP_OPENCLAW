@@ -2,16 +2,29 @@
 
 项目由 Vue 前端、Agent Web API、Python ERP API、ERP MCP、MySQL、MongoDB 和 OpenSandbox 组成。
 
-## Docker Compose 快速启动
+## Ubuntu 一键部署
 
 ```bash
+git clone <repository-url> /opt/erp_openclaw
+cd /opt/erp_openclaw
 cp .env.docker.example .env
 # 填写 .env 中的数据库密码、登录密码、JWT 密钥和模型 API Key
-docker compose up -d --build
-docker compose ps
+chmod 600 .env
+sudo bash ./scripts/deploy.sh
 ```
 
-浏览器访问 `http://<server-ip>/`。完整配置、OpenSandbox 接入和现有数据迁移步骤见 [DOCKER_DEPLOY.md](./DOCKER_DEPLOY.md)。
+脚本会安装缺失的 Docker/Compose、部署宿主机 OpenSandbox、构建并启动全部 Compose 服务、配置开机启动并执行健康检查。浏览器访问 `http://<server-ip>/`。
+
+部署后的日常管理：
+
+```bash
+erpctl status
+erpctl health
+erpctl restart
+erpctl logs agent-web
+```
+
+完整配置、国内镜像源、OpenSandbox 网络边界和现有数据迁移步骤见 [DOCKER_DEPLOY.md](./DOCKER_DEPLOY.md)。
 
 > 不要对已有数据执行 `docker compose down -v`，`-v` 会删除 MySQL 和 MongoDB 持久卷。
 

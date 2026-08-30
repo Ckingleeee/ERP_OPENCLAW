@@ -1,4 +1,4 @@
-# Docker Compose 部署指南
+# Ubuntu 一键部署指南
 
 ## 1. 服务架构
 
@@ -13,37 +13,63 @@ Compose 统一管理以下服务：
 | `mysql` | ERP 业务数据 | 否 |
 | `mongodb` | Agent checkpoint、会话和沙箱绑定 | 否 |
 
-OpenSandbox 第一阶段仍在宿主机运行。它需要访问 Docker daemon 并创建用户沙箱，与普通 Web 服务的权限边界不同。
+OpenSandbox 在宿主机以 systemd 服务运行。它需要访问 Docker daemon 并创建用户沙箱，与普通 Web 服务的权限边界不同。`deploy.sh` 和 `erpctl` 会统一管理它，因此对运维人员仍是一套入口。
 
-## 2. 前置条件
+## 2. 支持范围
 
-- Linux 服务器已安装 Docker Engine 和 Docker Compose v2。
-- OpenSandbox 已能在宿主机启动。
+- Ubuntu 22.04/24.04（脚本会安装缺失的 Docker Engine 和 Compose v2）。
 - 至少 4 GB 内存；运行多个用户沙箱时建议 8 GB 以上。
 - 防火墙只对外开放 HTTP/HTTPS 和运维 SSH，不要公开 MySQL、MongoDB、8080、8090 和 MCP 端口。
+- 云厂商安全组仍需手动放行 SSH、HTTP/HTTPS；脚本无法修改云控制台安全组。
 
-验证：
+其他 Linux 发行版可以手动安装 Docker 后使用 Compose，但不属于一键安装脚本的支持范围。
 
-```bash
-docker --version
-docker compose version
-docker info
-```
+## 3. 一键部署
 
-## 3. 准备环境变量
+克隆代码并准备配置：
 
 ```bash
+git clone <repository-url> /opt/erp_openclaw
+cd /opt/erp_openclaw
 cp .env.docker.example .env
 chmod 600 .env
+# 编辑 .env，替换全部密码、API Key、域名和占位值
+sudoedit .env
 ```
 
-生成随机密钥：
+执行部署：
 
 ```bash
-openssl rand -hex 32
+sudo bash ./scripts/deploy.sh
 ```
 
-至少替换这些值：
+脚本会依次完成：
+
+1. 校验 `.env`，但不输出密钥。
+2. 安装或启动 Docker Engine、Buildx 和 Compose v2。
+3. 安装固定版本的 OpenSandbox Server，生成配置并限制监听 Docker 网关。
+4. 拉取 MySQL、MongoDB 和沙箱镜像。
+5. 构建前后端镜像，启动 Compose 服务。
+6. 安装 `erpctl` 和 `erp-openclaw.service`，配置开机启动。
+7. 检查 OpenSandbox、前端、Agent、ERP API、MCP 和数据库健康状态。
+
+脚本不会创建、修改或覆盖 `.env`。环境校验失败时，应修复提示项后重新执行。
+
+已有可用 OpenSandbox，不希望重新安装或改写其配置时：
+
+```bash
+sudo bash ./scripts/deploy.sh --reuse-opensandbox
+```
+
+服务器已有构建完成的应用镜像时：
+
+```bash
+sudo bash ./scripts/deploy.sh --no-build --reuse-opensandbox
+```
+
+## 4. 必填环境变量
+
+至少替换：
 
 - `MYSQL_ROOT_PASSWORD`
 - `ERP_DB_PASSWORD`
@@ -59,7 +85,45 @@ openssl rand -hex 32
 
 `.env` 已被 Git 忽略，不得提交。
 
-## 4. 让容器访问宿主机 OpenSandbox
+生成随机密钥：
+
+```bash
+openssl rand -hex 32
+```
+
+### 匿名演示模式
+
+公开演示环境可以关闭登录页面，并为每个浏览器自动签发独立的匿名身份：
+
+```dotenv
+AUTH_DEMO_MODE=true
+AUTH_DEMO_DISPLAY_NAME=演示用户
+AUTH_DEMO_ROLE=demo
+AUTH_DEMO_DEPARTMENT=公开演示
+```
+
+同一浏览器会通过签名 HttpOnly Cookie 复用身份，不同浏览器的对话、记忆和沙箱互相隔离。清除站点 Cookie 后会获得新的演示身份。正式环境应保持 `AUTH_DEMO_MODE=false`，继续使用用户名和密码登录。
+
+## 5. 国内网络和镜像源
+
+构建源全部可以在 `.env` 中替换，不需要改 Dockerfile：
+
+| 变量 | 默认值 | 用途 |
+|---|---|---|
+| `MYSQL_IMAGE` | `mysql:8.4` | MySQL 镜像 |
+| `MONGODB_IMAGE` | `mongo:8.0` | MongoDB 镜像 |
+| `PYTHON_BASE_IMAGE` | `python:3.12-slim` | 后端基础镜像 |
+| `NODE_BASE_IMAGE` | `node:22-alpine` | 前端构建镜像 |
+| `NGINX_BASE_IMAGE` | `nginx:1.27-alpine` | 前端运行镜像 |
+| `APT_MIRROR` | 空（Debian 官方源） | 容器 APT 源 |
+| `APT_SECURITY_MIRROR` | 空（Debian 官方源） | Debian security 源 |
+| `PIP_INDEX_URL` | `https://pypi.org/simple` | 后端和 OpenSandbox PyPI 源 |
+| `NPM_REGISTRY` | `https://registry.npmjs.org` | 前端 NPM 源 |
+| `DOCKER_APT_REPOSITORY_URL` | Docker 官方 Ubuntu 仓库 | Docker 安装源 |
+
+镜像地址应使用云厂商当前提供的地址。不要把镜像仓库用户名、密码或临时 Token 写进仓库。
+
+## 6. OpenSandbox 网络边界
 
 Agent 容器通过以下地址访问 OpenSandbox：
 
@@ -73,7 +137,7 @@ OpenSandbox 如果只监听 `127.0.0.1`，Docker 容器无法访问。建议让�
 docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'
 ```
 
-若输出是 `172.17.0.1`，在 OpenSandbox 配置中使用：
+若输出是 `172.17.0.1`，OpenSandbox 会绑定这个地址。`deploy.sh` 会自动生成并维护配置，无需手工编辑：
 
 ```toml
 [server]
@@ -82,45 +146,45 @@ port = 18080
 api_key = "<same-value-as-OPEN_SANDBOX_API_KEY>"
 ```
 
-重启 OpenSandbox 后从宿主机检查：
+从宿主机检查：
 
 ```bash
 curl http://172.17.0.1:18080/health
 ```
 
-不建议在无 API Key 和防火墙限制时监听 `0.0.0.0`。
+`OPEN_SANDBOX_API_KEY` 为生产必填值，部署脚本会把它同步到权限为 `600` 的 OpenSandbox 配置中。不建议监听 `0.0.0.0`，也不要在云安全组中公开 18080。
 
-## 5. 全新环境启动
+OpenSandbox 官方配置参考：[Configuration](https://github.com/opensandbox-group/OpenSandbox/blob/main/docs/getting-started/configuration.md)。
+
+## 7. 日常管理
 
 ```bash
-docker compose config --quiet
-docker compose up -d --build
-docker compose ps
+erpctl status
+erpctl health
+erpctl start
+erpctl restart
+erpctl stop
+erpctl logs agent-web
+erpctl logs frontend
 ```
 
-首次启动时会：
+`erpctl stop` 使用 `docker compose stop`，不会删除容器卷。不要执行 `docker compose down -v`。
 
-1. 创建 MySQL 和 MongoDB 持久卷。
-2. 执行 `docker/mysql/init/01-schema.sql`。
-3. 创建 MongoDB 应用用户。
-4. `erp-init` 对 `ERP_ADMIN_PASSWORD` 进行 bcrypt 加密并创建首个 ERP 登录用户。
-5. 按 MySQL → ERP API → MCP → Agent Web → Nginx 的顺序启动。
+自动启动由两个 systemd 单元负责：
 
-浏览器访问：
+- `opensandbox.service`：先启动沙箱控制面。
+- `erp-openclaw.service`：再确保 Compose 服务已启动。
+
+## 8. 手动诊断
 
 ```text
-http://<server-ip>/
-```
-
-## 6. 日志和健康检查
-
-```bash
 docker compose ps
 docker compose logs --tail=200 agent-web
 docker compose logs --tail=200 erp-mcp
 docker compose logs --tail=200 erp-api
 docker compose logs --tail=200 mysql mongodb
 curl http://127.0.0.1:${HTTP_PORT:-80}/health
+curl http://172.17.0.1:18080/health
 ```
 
 某个服务需要重启时：
@@ -129,7 +193,7 @@ curl http://127.0.0.1:${HTTP_PORT:-80}/health
 docker compose restart agent-web
 ```
 
-## 7. 从现有宿主机数据库迁移
+## 9. 从现有宿主机数据库迁移
 
 不要直接删除现有 MySQL、MongoDB 或 systemd 服务。先备份：
 
@@ -175,22 +239,21 @@ docker compose up -d --build
 
 > `mongorestore --drop` 会覆盖目标集合，只能在已确认备份和目标数据库的情况下执行。
 
-## 8. 日常更新
+## 10. 日常更新
 
 ```bash
 git pull --ff-only
-docker compose up -d --build
-docker compose ps
+sudo bash ./scripts/deploy.sh --reuse-opensandbox
 ```
 
-Compose 会只重建发生变化的应用容器，MySQL 和 MongoDB 数据保留在命名卷中。
+部署脚本不会执行 `git pull`。先检查并同步 Git，再重新部署，MySQL 和 MongoDB 数据仍保留在命名卷中。
 
-## 9. 停止和回滚
+## 11. 停止和回滚
 
-停止应用，保留数据：
+停止应用并保留数据：
 
 ```bash
-docker compose down
+erpctl stop
 ```
 
 不要在生产环境执行：
@@ -203,10 +266,10 @@ docker compose down -v
 
 ```bash
 git revert <commit-id>
-docker compose up -d --build
+sudo bash ./scripts/deploy.sh --reuse-opensandbox
 ```
 
-## 10. HTTPS
+## 12. HTTPS
 
 当 Nginx 配置 HTTPS 后，将：
 

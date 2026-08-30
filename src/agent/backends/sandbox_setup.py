@@ -11,6 +11,7 @@ OpenSandbox 沙箱的初始化与文件播种模块。
 运行时的增量技能同步由 SkillsSyncMiddleware 负责。
 """
 from datetime import timedelta
+import os
 from pathlib import Path
 from typing import List, Tuple
 
@@ -45,7 +46,10 @@ def setup_sandbox(config, sandbox_id=None, image=None) -> OpenSandboxBackend:
 
     if not sandbox_id:
         if not image:
-            image = "sandbox-registry.cn-zhangjiakou.cr.aliyuncs.com/opensandbox/code-interpreter:v1.0.2"
+            image = os.getenv(
+                "OPEN_SANDBOX_IMAGE",
+                "sandbox-registry.cn-zhangjiakou.cr.aliyuncs.com/opensandbox/code-interpreter:v1.0.2",
+            )
 
         print(f"[INFO] 正在创建新沙箱，使用镜像: {image}")
         sandbox = SandboxSync.create(
@@ -95,8 +99,11 @@ def _ensure_dirs(backend: OpenSandboxBackend) -> None:
         backend.execute(f"mkdir -p {d}")
 
 
-# 阿里云 PyPI 镜像，沙箱内走内网加速
-_PYPI_INDEX = "https://mirrors.aliyun.com/pypi/simple/"
+# 沙箱内安装技能依赖时使用的 PyPI 镜像。
+_PYPI_INDEX = os.getenv(
+    "SANDBOX_PIP_INDEX_URL",
+    "https://mirrors.aliyun.com/pypi/simple/",
+)
 # pip install 通用参数
 _PIP_INSTALL_ARGS = f"-i {_PYPI_INDEX} --default-timeout=60 --no-input -q"
 
