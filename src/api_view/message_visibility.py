@@ -18,6 +18,16 @@ INTERNAL_CONTEXT_END = (
 )
 
 
+def is_internal_display_message(message: dict[str, Any]) -> bool:
+    """Identify legacy child-agent narration stored as a browser message."""
+    source = str(message.get("source") or "").strip()
+    return (
+        message.get("role") == "assistant"
+        and bool(source)
+        and source != "main"
+    )
+
+
 def is_internal_stream_message(
     message: Any, metadata: dict[str, Any] | None = None
 ) -> bool:
@@ -34,6 +44,16 @@ def is_internal_stream_message(
         or INTERNAL_MEMORY_TAG in tags
         or metadata.get(INTERNAL_MODEL_METADATA_KEY) == INTERNAL_MEMORY_MODEL_NAME
     )
+
+
+def is_user_visible_assistant_message(
+    message: Any,
+    metadata: dict[str, Any] | None = None,
+    *,
+    is_subagent: bool = False,
+) -> bool:
+    """Allow only main-agent assistant messages into the browser text stream."""
+    return not is_subagent and not is_internal_stream_message(message, metadata)
 
 
 def strip_internal_context_prefix(content: str) -> str:

@@ -4,7 +4,7 @@
     <div class="panel-header" @click="togglePanel">
       <div class="header-left">
         <span class="panel-icon">🔧</span>
-        <span class="panel-title">工具调用详情</span>
+        <span class="panel-title">处理进度</span>
         <span class="tool-count">({{ toolCalls.length }})</span>
       </div>
       <span class="expand-icon">
@@ -23,7 +23,7 @@
         <!-- 工具头部 -->
         <div class="tool-header" @click="toggleExpand(tool.id || index)">
           <span class="tool-icon">{{ getToolIcon(tool.name) }}</span>
-          <span class="tool-name">{{ tool.name }}</span>
+          <span class="tool-name">{{ getToolDisplayName(tool.name) }}</span>
           <span v-if="tool.source && tool.source !== 'main'" class="tool-source">
             ({{ formatSource(tool.source) }})
           </span>
@@ -75,7 +75,7 @@ const props = defineProps({
 // 控制面板显示/隐藏
 const visible = ref(true)
 // 面板是否展开（控制整个工具列表的折叠）
-const isExpanded = ref(true)
+const isExpanded = ref(false)
 // 展开的工具列表
 const expandedTools = ref([])
 
@@ -128,6 +128,38 @@ function getToolIcon(name) {
 }
 
 /**
+ * 将内部工具名转换为用户容易理解的中文进度名称。
+ */
+function getToolDisplayName(name) {
+  const toolNameMap = {
+    task: '分配采购任务',
+    ls: '检查可用能力',
+    read_file: '读取分析资料',
+    write_file: '生成分析报告',
+    edit_file: '更新分析文件',
+    execute: '执行分析计算',
+    generate_visualization: '生成可视化图表',
+    supplier_query: '查询供应商',
+    part_query: '查询物料',
+    part_search: '搜索物料',
+    part_by_supplier: '查询供应商物料',
+    order_search_details: '查询订单明细',
+    order_create: '创建采购订单',
+    order_update: '更新采购订单',
+    inventory_warning: '查询库存预警',
+    web_search: '查询外部资料',
+    compact_conversation: '整理对话上下文',
+    request_order_info: '补充订单信息',
+    download_sandbox_file: '准备下载文件',
+    assign_skill: '加载专业能力'
+  }
+
+  if (!name) return '后台处理'
+  if (toolNameMap[name]) return toolNameMap[name]
+  return /[A-Za-z_]/.test(name) ? '后台处理' : name
+}
+
+/**
  * 格式化来源名称（中文）
  */
 function formatSource(source) {
@@ -136,7 +168,12 @@ function formatSource(source) {
     'researcher': '研究代理',
     'model-agent': '模型代理',
     'general': '通用代理',
+    'procurement-analyst': '采购分析助手',
+    'procurement-order': '采购订单助手',
     'main': '主助手'
+  }
+  if (/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(source)) {
+    return '专业子助手'
   }
   return sourceMap[source] || source
 }

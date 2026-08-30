@@ -24,7 +24,7 @@ from agent.schema import (
 )
 from api_view.agent_loader import agent_loader
 from api_view.auth import CurrentUser, get_current_user
-from api_view.message_visibility import is_internal_stream_message
+from api_view.message_visibility import is_user_visible_assistant_message
 
 
 # 创建路由
@@ -505,13 +505,17 @@ async def stream_chat_response(
             content_text = extract_content_from_token(token)
             has_tool_calls = hasattr(token, 'tool_call_chunks') and token.tool_call_chunks
             is_tool_result = hasattr(token, 'type') and token.type == "tool"
-            is_internal_message = is_internal_stream_message(token, metadata)
+            is_visible_assistant = is_user_visible_assistant_message(
+                token,
+                metadata,
+                is_subagent=is_subagent,
+            )
 
             if (
                 content_text
                 and not has_tool_calls
                 and not is_tool_result
-                and not is_internal_message
+                and is_visible_assistant
             ):
                 collected_content += content_text
                 yield create_sse_message({
@@ -548,7 +552,8 @@ async def stream_chat_response(
             if not (dm["role"] == "assistant" and not dm.get("content"))
         ]
 
-        # 保存完整展示消息到 MongoDB（包含子代理消息）
+        # 保存用户可见消息到 MongoDB；子代理自然语言已在流边界过滤，
+        # 仅保留其工具进度供前端按需展开查看。
         # 多轮对话：追加到已有消息，而非覆盖（每轮调用 save 时 display_messages 仅含当前轮）
         if resume_data is None:
             # 初始对话：追加到已有历史
