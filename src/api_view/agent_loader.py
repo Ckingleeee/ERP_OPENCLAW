@@ -24,7 +24,10 @@ from api_view.web_config import (
     MONGODB_DB_NAME,
     MONGODB_CHECKPOINT_COLLECTION,
 )
-from api_view.message_visibility import sanitize_legacy_assistant_content
+from api_view.message_visibility import (
+    is_internal_display_message,
+    sanitize_legacy_assistant_content,
+)
 
 from agent.main_agent import create_main_agent, precompute_agent_context, PrecomputedContext
 from agent.backends import sandbox_manager
@@ -381,6 +384,9 @@ class AgentLoader:
             hidden_internal_count = 0
             for doc in docs:
                 message = doc["message"]
+                if is_internal_display_message(message):
+                    hidden_internal_count += 1
+                    continue
                 content = message.get("content")
                 if message.get("role") == "assistant" and isinstance(content, str):
                     visible_content = sanitize_legacy_assistant_content(content)

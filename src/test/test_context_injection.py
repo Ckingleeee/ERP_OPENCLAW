@@ -10,7 +10,9 @@ from agent.middlewares.context_injection import (
     ContextInjectionMiddleware,
 )
 from api_view.message_visibility import (
+    is_internal_display_message,
     is_internal_stream_message,
+    is_user_visible_assistant_message,
     sanitize_legacy_assistant_content,
     strip_internal_context_prefix,
 )
@@ -73,6 +75,18 @@ class ContextInjectionTests(unittest.TestCase):
                 {INTERNAL_MODEL_METADATA_KEY: INTERNAL_MEMORY_MODEL_NAME},
             )
         )
+        self.assertFalse(
+            is_user_visible_assistant_message(
+                AIMessage(content="I'll inspect the available tools."),
+                is_subagent=True,
+            )
+        )
+        self.assertTrue(
+            is_user_visible_assistant_message(
+                AIMessage(content="采购分析已完成。"),
+                is_subagent=False,
+            )
+        )
 
     def test_legacy_context_is_removed_without_losing_answer(self):
         leaked = (
@@ -107,6 +121,35 @@ class ContextInjectionTests(unittest.TestCase):
                 '{"code": 200, "message": "正常业务 JSON"}'
             ),
             '{"code": 200, "message": "正常业务 JSON"}',
+        )
+
+    def test_child_agent_narration_is_not_a_display_message(self):
+        self.assertTrue(
+            is_internal_display_message(
+                {
+                    "role": "assistant",
+                    "content": "I'll start by scanning the skills directory.",
+                    "source": "d78a8575-995e-a658-b89e-096fcc196448",
+                }
+            )
+        )
+        self.assertFalse(
+            is_internal_display_message(
+                {
+                    "role": "assistant",
+                    "content": "采购分析已完成。",
+                    "source": "main",
+                }
+            )
+        )
+        self.assertFalse(
+            is_internal_display_message(
+                {
+                    "role": "tool",
+                    "text": "tool result",
+                    "source": "procurement-analyst",
+                }
+            )
         )
 
 
