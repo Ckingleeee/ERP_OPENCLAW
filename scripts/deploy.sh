@@ -8,6 +8,7 @@ VALIDATOR="$PROJECT_DIR/scripts/validate-docker-env.py"
 INSTALL_OPENSANDBOX="$PROJECT_DIR/scripts/install-opensandbox.sh"
 BUILD_IMAGES=true
 INSTALL_SANDBOX=true
+PULL_IMAGES=false
 
 log() {
   printf '\n[deploy] %s\n' "$*"
@@ -26,6 +27,7 @@ usage() {
 选项：
   --no-build            使用服务器已有镜像，不重新构建
   --reuse-opensandbox   不重新安装或改写现有 OpenSandbox
+  --pull-images         主动更新数据库镜像和构建基础镜像
   -h, --help            显示帮助
 
 脚本不会创建或修改 .env。首次执行前请从 .env.docker.example 复制并填写。
@@ -39,6 +41,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     --reuse-opensandbox)
       INSTALL_SANDBOX=false
+      ;;
+    --pull-images)
+      PULL_IMAGES=true
       ;;
     -h|--help)
       usage
@@ -110,9 +115,18 @@ EOF
 
 ensure_docker() {
   if command -v docker >/dev/null 2>&1 \
-    && docker compose version >/dev/null 2>&1 \
-    && { [[ "$BUILD_IMAGES" == false ]] || docker buildx version >/dev/null 2>&1; }; then
+    && docker compose version >/dev/null 2>&1; then
     systemctl enable --now docker
+
+    if [[ "$BUILD_IMAGES" == false ]] \
+      || docker buildx version >/dev/null 2>&1; then
+      return
+    fi
+
+    log "安装 Ubuntu docker-buildx，保留现有 Docker 与 Compose"
+    apt-get -o Acquire::Retries=5 update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y docker-buildx
+    docker buildx version >/dev/null
     return
   fi
 
@@ -207,11 +221,15 @@ log "校验 Docker Compose"
 compose config --quiet
 
 if [[ "$BUILD_IMAGES" == true ]]; then
-  log "拉取数据库镜像"
-  compose pull mysql mongodb
+  build_args=()
+  if [[ "$PULL_IMAGES" == true ]]; then
+    log "更新数据库镜像"
+    compose pull mysql mongodb
+    build_args+=(--pull)
+  fi
 
   log "构建后端和前端镜像"
-  compose build --pull erp-api erp-mcp agent-web frontend
+  compose build "${build_args[@]}" erp-api erp-mcp agent-web frontend
 fi
 
 http_port="$(env_get HTTP_PORT)"
