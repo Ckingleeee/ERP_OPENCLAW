@@ -1,0 +1,238 @@
+name: erp-openclaw
+
+x-backend-image: &backend-image
+  image: erp-openclaw-backend:local
+  build:
+    context: .
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  networks:
+    - backend
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?configure MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: ${ERP_DB_NAME:-motorparts_db}
+      MYSQL_USER: ${ERP_DB_USER:-erp_app}
+      MYSQL_PASSWORD: ${ERP_DB_PASSWORD:?configure ERP_DB_PASSWORD in .env}
+      TZ: Asia/Shanghai
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    networks:
+      - backend
+
+  mongodb:
+    image: mongo:8.0
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-mongo_root}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?configure MONGO_ROOT_PASSWORD in .env}
+      MONGO_INITDB_DATABASE: ${MONGODB_DB_NAME:-langchain_db}
+      MONGODB_APP_USER: ${MONGODB_APP_USER:-erp_agent}
+      MONGODB_APP_PASSWORD: ${MONGODB_APP_PASSWORD:?configure MONGODB_APP_PASSWORD in .env}
+      MONGODB_APP_DATABASE: ${MONGODB_DB_NAME:-langchain_db}
+      TZ: Asia/Shanghai
+    volumes:
+      - mongodb-data:/data/db
+      - ./docker/mongodb/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet --host 127.0.0.1
+          --username "$${MONGO_INITDB_ROOT_USERNAME}"
+          --password "$${MONGO_INITDB_ROOT_PASSWORD}"
+          --authenticationDatabase admin
+          --eval "quit(db.adminCommand('ping').ok ? 0 : 2)"
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    networks:
+      - backend
+
+  erp-init:
+    <<: *backend-image
+    restart: "no"
+    command: ["python", "-m", "erp_backend.bootstrap"]
+    environment:
+      ERP_DB_HOST: mysql
+      ERP_DB_PORT: 3306
+      ERP_DB_USER: ${ERP_DB_USER:-erp_app}
+      ERP_DB_PASSWORD: ${ERP_DB_PASSWORD:?configure ERP_DB_PASSWORD in .env}
+      ERP_DB_NAME: ${ERP_DB_NAME:-motorparts_db}
+      ERP_ADMIN_USERNAME: ${ERP_ADMIN_USERNAME:-yyf}
+      ERP_ADMIN_PASSWORD: ${ERP_ADMIN_PASSWORD:?configure ERP_ADMIN_PASSWORD in .env}
+      ERP_ADMIN_DISPLAY_NAME: ${ERP_ADMIN_DISPLAY_NAME:-yyf}
+      ERP_ADMIN_ROLE: ${ERP_ADMIN_ROLE:-admin}
+      ERP_ADMIN_DEPARTMENT: ${ERP_ADMIN_DEPARTMENT:-采购部}
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  erp-api:
+    <<: *backend-image
+    command:
+      - python
+      - -m
+      - uvicorn
+      - erp_backend.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+    environment:
+      ERP_API_HOST: 0.0.0.0
+      ERP_API_PORT: 8080
+      ERP_DB_HOST: mysql
+      ERP_DB_PORT: 3306
+      ERP_DB_USER: ${ERP_DB_USER:-erp_app}
+      ERP_DB_PASSWORD: ${ERP_DB_PASSWORD:?configure ERP_DB_PASSWORD in .env}
+      ERP_DB_NAME: ${ERP_DB_NAME:-motorparts_db}
+      ERP_DB_CHECK_ON_STARTUP: "true"
+    depends_on:
+      erp-init:
+        condition: service_completed_successfully
+    expose:
+      - "8080"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  erp-mcp:
+    <<: *backend-image
+    command: ["python", "-m", "mcp_server.server_main"]
+    environment:
+      ERP_API_BASE_URL: http://erp-api:8080/api
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8000
+      MCP_PATH: /mcp
+    depends_on:
+      erp-api:
+        condition: service_healthy
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import socket;
+          connection=socket.create_connection(('127.0.0.1', 8000), 3);
+          connection.close()
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  agent-web:
+    <<: *backend-image
+    command:
+      - python
+      - -m
+      - uvicorn
+      - api_view.web_main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8090"
+    environment:
+      ERP_DB_HOST: mysql
+      ERP_DB_PORT: 3306
+      ERP_DB_USER: ${ERP_DB_USER:-erp_app}
+      ERP_DB_PASSWORD: ${ERP_DB_PASSWORD:?configure ERP_DB_PASSWORD in .env}
+      ERP_DB_NAME: ${ERP_DB_NAME:-motorparts_db}
+      ERP_MCP_URL: http://erp-mcp:8000/mcp
+      MONGODB_URI: mongodb://${MONGODB_APP_USER:-erp_agent}:${MONGODB_APP_PASSWORD:?configure MONGODB_APP_PASSWORD in .env}@mongodb:27017/${MONGODB_DB_NAME:-langchain_db}?authSource=${MONGODB_DB_NAME:-langchain_db}
+      MONGODB_DB_NAME: ${MONGODB_DB_NAME:-langchain_db}
+      MONGODB_CHECKPOINT_COLLECTION: ${MONGODB_CHECKPOINT_COLLECTION:-checkpoints}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?configure DEEPSEEK_API_KEY in .env}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:?configure DEEPSEEK_BASE_URL in .env}
+      ALIBABA_API_KEY: ${ALIBABA_API_KEY:?configure ALIBABA_API_KEY in .env}
+      ALIBABA_BASE_URL: ${ALIBABA_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      ALIBABA_MODEL: ${ALIBABA_MODEL:-qwen-plus}
+      ALIBABA_SEARCH_MODEL: ${ALIBABA_SEARCH_MODEL:-qwen-plus}
+      OPEN_SANDBOX_DOMAIN: ${OPEN_SANDBOX_DOMAIN:-http://host.docker.internal:18080}
+      OPEN_SANDBOX_API_KEY: ${OPEN_SANDBOX_API_KEY:-}
+      ANALYSIS_MCP_URL: ${ANALYSIS_MCP_URL:-}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?configure AUTH_JWT_SECRET in .env}
+      AUTH_ISSUER: ${AUTH_ISSUER:-erp-procurement-agent}
+      AUTH_TOKEN_EXPIRE_MINUTES: ${AUTH_TOKEN_EXPIRE_MINUTES:-480}
+      AUTH_COOKIE_NAME: ${AUTH_COOKIE_NAME:-erp_session}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      AUTH_COOKIE_SAMESITE: ${AUTH_COOKIE_SAMESITE:-lax}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost}
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - agent-downloads:/app/src/download
+    networks:
+      - backend
+      - egress
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      erp-api:
+        condition: service_healthy
+      erp-mcp:
+        condition: service_healthy
+    expose:
+      - "8090"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=3)
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
+
+  frontend:
+    image: erp-openclaw-frontend:local
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    restart: unless-stopped
+    ports:
+      - ${HTTP_PORT:-80}:80
+    depends_on:
+      agent-web:
+        condition: service_healthy
+    networks:
+      - frontend
+      - backend
+
+networks:
+  frontend:
+  backend:
+    internal: true
+  egress:
+
+volumes:
+  mysql-data:
+  mongodb-data:
+  agent-downloads:

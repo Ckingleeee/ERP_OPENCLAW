@@ -15,10 +15,11 @@ from typing import List, Tuple
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
-# MCP Server 连接配置
+# MCP Server 连接配置。容器环境中使用服务名，本地开发仍保留回环地址。
+ERP_MCP_URL = os.getenv("ERP_MCP_URL", "http://127.0.0.1:8000/mcp").strip()
 MCP_SERVER_CONFIG = {
     "erp-api": {
-        "url": "http://127.0.0.1:8000/mcp",
+        "url": ERP_MCP_URL,
         "transport": "streamable_http",
     },
 }
