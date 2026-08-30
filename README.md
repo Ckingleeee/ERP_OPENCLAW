@@ -1,3 +1,24 @@
+# 智能采购助手 ERP
+
+项目由 Vue 前端、Agent Web API、Python ERP API、ERP MCP、MySQL、MongoDB 和 OpenSandbox 组成。
+
+## Docker Compose 快速启动
+
+```bash
+cp .env.docker.example .env
+# 填写 .env 中的数据库密码、登录密码、JWT 密钥和模型 API Key
+docker compose up -d --build
+docker compose ps
+```
+
+浏览器访问 `http://<server-ip>/`。完整配置、OpenSandbox 接入和现有数据迁移步骤见 [DOCKER_DEPLOY.md](./DOCKER_DEPLOY.md)。
+
+> 不要对已有数据执行 `docker compose down -v`，`-v` 会删除 MySQL 和 MongoDB 持久卷。
+
+## 本地开发
+
+下方保留 LangGraph 开发模板说明，仅用于 Agent 开发调试。
+
 # New LangGraph Project
 
 [![CI](https://github.com/langchain-ai/new-langgraph-project/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/langchain-ai/new-langgraph-project/actions/workflows/unit-tests.yml)
@@ -58,4 +79,3 @@ Follow-up requests extend the same thread. You can create an entirely new thread
 For more advanced features and examples, refer to the [LangGraph documentation](https://langchain-ai.github.io/langgraph/). These resources can help you adapt this template for your specific use case and build more sophisticated conversational agents.
 
 LangGraph Studio also integrates with [LangSmith](https://smith.langchain.com/) for more in-depth tracing and collaboration with teammates, allowing you to analyze and optimize your chatbot's performance.
-
