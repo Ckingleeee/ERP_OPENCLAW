@@ -351,6 +351,12 @@ async function handleSend(message) {
         // ★ 中断检测回调
         onInterrupt: (data) => {
           console.log('[App] 检测到中断:', data.interrupt_type)
+          // 新会话可能在首次完成前就进入 HITL。此时 onDone 不会负责保存
+          // thread_id，必须直接使用中断事件中后端返回的会话 ID。
+          if (data.thread_id && !currentThreadId.value) {
+            currentThreadId.value = data.thread_id
+            loadSessions()
+          }
           // 兜底：将所有 calling 状态的工具标记为 done
           for (const m of messages.value) {
             if (m.role === 'tool' && m.tool_status === 'calling') {
@@ -436,7 +442,14 @@ async function handleSend(message) {
  *   - HITL 审批: { decisions: [{ type: "approve" }] }
  */
 async function handleResume(resumeData) {
-  if (isResuming.value || !currentThreadId.value) return
+  const threadId = currentThreadId.value || interruptData.value?.thread_id
+  if (isResuming.value || !threadId) return
+
+  // 防御性同步：即使首次中断回调没有及时更新状态，也能继续恢复。
+  if (!currentThreadId.value) {
+    currentThreadId.value = threadId
+    loadSessions()
+  }
 
   isResuming.value = true
 
@@ -445,7 +458,7 @@ async function handleResume(resumeData) {
 
   try {
     const result = await resumeChat(
-      currentThreadId.value,
+      threadId,
       resumeData,
       {
         onToken: (content, source) => {
@@ -515,6 +528,10 @@ async function handleResume(resumeData) {
         // ★ 恢复后仍可能再次中断（如：先数据补充 → 再 HITL 审批）
         onInterrupt: (data) => {
           console.log('[App] 恢复后再次中断:', data.interrupt_type)
+          if (data.thread_id && !currentThreadId.value) {
+            currentThreadId.value = data.thread_id
+            loadSessions()
+          }
           for (const m of messages.value) {
             if (m.role === 'tool' && m.tool_status === 'calling') {
               m.tool_status = 'done'
