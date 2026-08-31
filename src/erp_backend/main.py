@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 from erp_backend import database, repository
 from erp_backend.config import settings
-from erp_backend.schemas import OrderCreate, OrderUpdate
+from erp_backend.schemas import ReplenishmentCreate, ReplenishmentUpdate
 from erp_backend.serialization import json_value
 
 
@@ -36,9 +36,9 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(
-    title="Motor Parts ERP API",
+    title="Card Benefits Operations API",
     version="1.0.0",
-    description="Python ERP backend compatible with the project's MCP tools.",
+    description="Credit-card benefits and marketing-resource operations backend.",
     lifespan=lifespan,
 )
 
@@ -70,73 +70,79 @@ def health():
     return success({"status": "healthy", "database": settings.db_name})
 
 
-@app.get("/api/suppliers/search")
-def search_suppliers(name: str = Query(min_length=1, max_length=100)):
-    return success(repository.search_suppliers(name.strip()))
+@app.get("/api/providers/search")
+def search_providers(name: str = Query(min_length=1, max_length=100)):
+    return success(repository.search_providers(name.strip()))
 
 
-@app.get("/api/parts/page")
-def list_parts(
+@app.get("/api/resources/page")
+def list_resources(
     current: int = Query(default=1, ge=1),
     size: int = Query(default=10, ge=1, le=500),
     name: str | None = Query(default=None, max_length=100),
     category: str | None = Query(default=None, max_length=50),
-    supplier_id: int | None = Query(default=None, alias="supplierId", gt=0),
+    provider_id: int | None = Query(default=None, alias="providerId", gt=0),
 ):
     return success(
-        repository.list_parts(
+        repository.list_resources(
             current=current,
             size=size,
             name=name.strip() if name else None,
             category=category.strip() if category else None,
-            supplier_id=supplier_id,
+            provider_id=provider_id,
         )
     )
 
 
-@app.get("/api/parts/search")
-def search_parts(name: str = Query(min_length=1, max_length=100)):
-    return success(repository.search_parts(name.strip()))
+@app.get("/api/resources/search")
+def search_resources(name: str = Query(min_length=1, max_length=100)):
+    return success(repository.search_resources(name.strip()))
 
 
-@app.get("/api/parts/supplier/{supplier_id}")
-def list_parts_by_supplier(supplier_id: int):
-    if supplier_id <= 0:
-        return error("supplier_id must be greater than zero", code=422, status_code=422)
-    return success(repository.list_parts_by_supplier(supplier_id))
+@app.get("/api/resources/provider/{provider_id}")
+def list_resources_by_provider(provider_id: int):
+    if provider_id <= 0:
+        return error("provider_id must be greater than zero", code=422, status_code=422)
+    return success(repository.list_resources_by_provider(provider_id))
 
 
-@app.get("/api/inventory/warning")
-def inventory_warnings():
-    return success(repository.inventory_warnings())
+@app.get("/api/quotas/warning")
+def quota_warnings():
+    return success(repository.quota_warnings())
 
 
-@app.post("/api/orders/create")
-def create_order(payload: OrderCreate):
-    return success(repository.create_order(payload), "order created")
+@app.post("/api/replenishments/create")
+def create_replenishment(payload: ReplenishmentCreate):
+    return success(repository.create_replenishment(payload), "replenishment created")
 
 
-@app.put("/api/orders/update/{order_id}")
-def update_order(order_id: int, payload: OrderUpdate):
-    if order_id <= 0:
-        return error("order_id must be greater than zero", code=422, status_code=422)
-    order = repository.update_order(order_id, payload)
-    if order is None:
-        return error("order not found", code=404, status_code=404)
-    return success(order, "order updated")
+@app.put("/api/replenishments/update/{replenishment_id}")
+def update_replenishment(
+    replenishment_id: int, payload: ReplenishmentUpdate
+):
+    if replenishment_id <= 0:
+        return error(
+            "replenishment_id must be greater than zero", code=422, status_code=422
+        )
+    replenishment = repository.update_replenishment(replenishment_id, payload)
+    if replenishment is None:
+        return error("replenishment not found", code=404, status_code=404)
+    return success(replenishment, "replenishment updated")
 
 
-@app.get("/api/orders/search-details")
-def search_order_details(
-    part_name: str | None = Query(default=None, alias="partName", max_length=100),
+@app.get("/api/replenishments/search-details")
+def search_replenishment_details(
+    resource_name: str | None = Query(
+        default=None, alias="resourceName", max_length=100
+    ),
     start_date: date | None = Query(default=None, alias="startDate"),
     end_date: date | None = Query(default=None, alias="endDate"),
 ):
     if start_date and end_date and start_date > end_date:
         return error("startDate cannot be later than endDate", code=422, status_code=422)
     return success(
-        repository.search_order_details(
-            part_name=part_name.strip() if part_name else None,
+        repository.search_replenishment_details(
+            resource_name=resource_name.strip() if resource_name else None,
             start_date=start_date,
             end_date=end_date,
         )

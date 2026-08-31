@@ -50,8 +50,8 @@ def extract_content_from_token(token) -> str:
 async def stream_agent_response(agent_graph, user_input: str) -> str:
     """流式处理代理响应，支持 Human-in-the-Loop 中断恢复。
 
-    当子 Agent 调用 order_create / order_update 时，流程暂停，
-    展示订单信息等待人工确认。确认后继续执行。
+    当子 Agent 调用 replenishment_create / replenishment_update 时，流程暂停，
+    展示资源补充单信息等待人工确认。确认后继续执行。
     """
     config = {"configurable": {"thread_id": "test-thread-001"}}
     context = {"user_id": "laoxiao", "username": "laoxiao"}
@@ -211,36 +211,38 @@ async def stream_agent_response(agent_graph, user_input: str) -> str:
     return collected_response
 
 
-def _print_order_summary(args: dict) -> None:
-    """格式化打印订单关键信息，便于人工快速确认。"""
-    # 订单头信息
-    order_number = args.get("orderNumber", "")
-    if order_number:
-        print(f"  订单编号: {order_number}")
-    total = args.get("totalAmount", "")
+def _print_replenishment_summary(args: dict) -> None:
+    """格式化打印资源补充单关键信息，便于人工快速确认。"""
+    replenishment_number = args.get("replenishmentNumber") or args.get(
+        "replenishment_number", ""
+    )
+    if replenishment_number:
+        print(f"  补充单编号: {replenishment_number}")
+    total = args.get("totalAmount") or args.get("total_amount", "")
     if total:
         print(f"  总金额: {total}")
-    status_map = {1: "待审核", 2: "已审核", 3: "采购中", 4: "已入库", 5: "已取消"}
+    status_map = {1: "待审核", 2: "已审核", 3: "配置中", 4: "已生效", 5: "已取消"}
     status = args.get("status")
     if status is not None:
         print(f"  状态: {status_map.get(status, status)}")
-    expected = args.get("expectedDeliveryDate", "")
+    expected = args.get("expectedActivationDate") or args.get(
+        "expected_activation_date", ""
+    )
     if expected:
-        print(f"  预计交货: {expected}")
+        print(f"  预计生效: {expected}")
     remark = args.get("remark", "")
     if remark:
         print(f"  备注: {remark}")
 
-    # 订单明细
-    details = args.get("orderDetail", [])
+    details = args.get("detail", [])
     if details:
         print(f"  明细 ({len(details)} 项):")
         for i, item in enumerate(details, 1):
-            part_id = item.get("partId", "?")
+            resource_id = item.get("resourceId") or item.get("resource_id", "?")
             qty = item.get("quantity", "?")
-            price = item.get("unitPrice", "?")
+            price = item.get("unitCost") or item.get("unit_cost", "?")
             subtotal = item.get("subtotal", "")
-            info = f"    {i}. 物料ID={part_id}, 数量={qty}, 单价={price}"
+            info = f"    {i}. 资源ID={resource_id}, 数量={qty}, 单位成本={price}"
             if subtotal:
                 info += f", 小计={subtotal}"
             print(info)
@@ -261,15 +263,15 @@ async def _handle_interrupts(interrupts_detected: list) -> dict:
             # ---- 第 2 层：HITL 审批中断（interrupt_on 配置）----
             return _handle_hitl_interrupt(interrupt_value)
 
-        elif interrupt_value.get("type") == "order_info_request":
-            # ---- 第 1 层：数据补充中断（request_order_info 工具）----
-            return _handle_order_info_interrupt(interrupt_value)
+        elif interrupt_value.get("type") == "replenishment_info_request":
+            # ---- 第 1 层：数据补充中断（request_replenishment_info 工具）----
+            return _handle_replenishment_info_interrupt(interrupt_value)
 
     return {}
 
 
 def _handle_hitl_interrupt(interrupt_value: dict) -> dict:
-    """处理 HITL 审批中断：展示订单信息，收集 approve/reject 决策。"""
+    """处理 HITL 审批中断：展示补充单信息，收集 approve/reject 决策。"""
     decisions = []
     print(f"\n{'=' * 60}")
     print("⚠  需要人工确认以下操作：")
@@ -286,8 +288,8 @@ def _handle_hitl_interrupt(interrupt_value: dict) -> dict:
         ).get("allowed_decisions", ["approve", "reject"])
 
         print(f"\n操作类型: {tool_name}")
-        print(f"订单信息:")
-        _print_order_summary(tool_args)
+        print("补充单信息:")
+        _print_replenishment_summary(tool_args)
         print(f"\n(完整参数: {json.dumps(tool_args, indent=2, ensure_ascii=False)})")
         print(f"\n允许的操作: {', '.join(allowed)}")
 
@@ -304,10 +306,10 @@ def _handle_hitl_interrupt(interrupt_value: dict) -> dict:
     return {"decisions": decisions}
 
 
-def _handle_order_info_interrupt(interrupt_value: dict) -> dict:
+def _handle_replenishment_info_interrupt(interrupt_value: dict) -> dict:
     """处理数据补充中断：展示缺失字段，收集人工补充信息。"""
     print(f"\n{'=' * 60}")
-    print("⚠  订单数据不完整，请补充以下信息：")
+    print("⚠  补充单数据不完整，请补充以下信息：")
     print(f"\n缺少字段: {interrupt_value['missing_fields']}")
     print(f"\n已收集数据:")
     print(f"  {interrupt_value['collected_data']}")
@@ -322,7 +324,7 @@ async def main():
     """主交互循环。"""
     print("Deep Agent 流式交互测试 (支持 Human-in-the-Loop)")
     print("说明: 输入您的问题，代理将流式地回复。")
-    print("      涉及订单创建/修改时会要求人工确认。")
+    print("      涉及资源补充单创建/修改时会要求人工确认。")
     print("      输入 '退出' 或 'quit' 结束程序。")
     print("-" * 50)
 

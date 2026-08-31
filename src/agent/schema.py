@@ -11,7 +11,7 @@ from pydantic import Field, BaseModel
 
 
 @dataclass
-class ProcurementContext:
+class BenefitsOperationsContext:
     """
     运行时上下文，由调用方在 invoke 时传入。
     用于传递当前用户身份等基础信息。
@@ -30,12 +30,12 @@ class UserPreferences:
     preferred_chart_type: Optional[str] = None      # 'bar', 'line', 'pie' 等
     preferred_currency: Optional[str] = None        # 'CNY', 'USD' 等
     preferred_language: Optional[str] = None        # 'zh', 'en' 等
-    recent_suppliers: list[str] = None              # 近期使用的供应商列表
+    recent_providers: list[str] = None              # 近期关注的权益服务商列表
     recent_queries: list[str] = None                # 近期分析需求摘要列表
 
     def __post_init__(self):
-        if self.recent_suppliers is None:
-            self.recent_suppliers = []
+        if self.recent_providers is None:
+            self.recent_providers = []
         if self.recent_queries is None:
             self.recent_queries = []
 

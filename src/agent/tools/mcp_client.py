@@ -7,7 +7,7 @@ MCP 工具客户端。
 使用方式:
     from agent.tools.mcp_client import load_mcp_tools
 
-    all_tools, analyst_tools, order_tools, chart_tools = await load_mcp_tools()
+    all_tools, analyst_tools, replenishment_tools, chart_tools = await load_mcp_tools()
 """
 
 import os
@@ -32,8 +32,8 @@ if ANALYSIS_MCP_URL:
     }
 
 # 工具分组规则（前缀匹配）
-ANALYST_TOOL_PREFIXES = ("supplier_", "part_", "inventory_")
-ORDER_TOOL_PREFIXES = ("order_",)
+ANALYST_TOOL_PREFIXES = ("provider_", "resource_", "quota_")
+REPLENISHMENT_TOOL_PREFIXES = ("replenishment_",)
 CHART_TOOL_PREFIXES = ("generate_",)  # 魔塔社区 MCP 可视化+工具（26 图表/地图/图表 + 1 spreadsheet）
 
 
@@ -47,10 +47,10 @@ async def load_mcp_tools(
         server_config: MCP Server 连接配置，默认使用 MCP_SERVER_CONFIG。
 
     Returns:
-        (all_tools, analyst_tools, order_tools, chart_tools) 四元组
+        (all_tools, analyst_tools, replenishment_tools, chart_tools) 四元组
         - all_tools: 全部 MCP 工具列表（ERP + 图表）
-        - analyst_tools: 供应商查询 + 零部件查询 + 库存预警工具
-        - order_tools: 订单创建 + 订单更新 + 订单搜索工具
+        - analyst_tools: 权益服务商 + 营销资源 + 配额预警工具
+        - replenishment_tools: 补充单创建 + 更新 + 历史搜索工具
         - chart_tools: 图表/地图/可视化生成工具（来自魔塔社区 MCP Server，27 种）
     """
     if server_config is None:
@@ -85,9 +85,9 @@ async def load_mcp_tools(
         t for t in erp_tools
         if t.name.startswith(ANALYST_TOOL_PREFIXES)
     ]
-    order_tools = [
+    replenishment_tools = [
         t for t in erp_tools
-        if t.name.startswith(ORDER_TOOL_PREFIXES)
+        if t.name.startswith(REPLENISHMENT_TOOL_PREFIXES)
     ]
 
     # 图表工具（来自魔塔社区）
@@ -99,8 +99,8 @@ async def load_mcp_tools(
     print(
         f"[INFO] 工具分组完成: "
         f"分析类 {len(analyst_tools)} 个, "
-        f"订单类 {len(order_tools)} 个, "
+        f"补充单类 {len(replenishment_tools)} 个, "
         f"图表类 {len(chart_tools)} 个"
     )
 
-    return all_tools, analyst_tools, order_tools, chart_tools
+    return all_tools, analyst_tools, replenishment_tools, chart_tools

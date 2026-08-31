@@ -15,7 +15,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--username", required=True)
     parser.add_argument("--name", required=True, dest="display_name")
     parser.add_argument("--role", default="purchase")
-    parser.add_argument("--department", default="采购部")
+    parser.add_argument("--department", default="信用卡运营部")
     parser.add_argument(
         "--reset-password",
         action="store_true",

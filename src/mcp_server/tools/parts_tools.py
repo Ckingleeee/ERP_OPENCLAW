@@ -2,29 +2,31 @@ from fastmcp import FastMCP, Context
 from typing import Optional
 
 # 分组名称
-GROUP_NAME = "part"   # 分组名称，最终工具名称为 part_query / part_search
-def register_parts_tools(mcp: FastMCP):
-    """注册零部件分组的所有工具"""
+GROUP_NAME = "resource"
+
+
+def register_resource_tools(mcp: FastMCP):
+    """注册信用卡权益与营销资源分组的所有工具。"""
 
     @mcp.tool(name=f"{GROUP_NAME}_query")
-    async def query_parts(
+    async def query_resources(
         current: Optional[int] = 1,
         size: Optional[int] = 10,
         name: Optional[str] = None,
         category: Optional[str] = None,
-        supplier_id: Optional[int] = None,
+        provider_id: Optional[int] = None,
         ctx: Context = None,
     ) -> list:
         """
-        分页查询零部件列表。
-        支持按名称模糊查询、按分类筛选、按供应商ID筛选。
+        分页查询权益与营销资源列表。
+        支持按名称模糊查询、按分类筛选、按服务商 ID 筛选。
 
         Args:
             current: 当前页码，从1开始，默认1
             size: 每页大小，默认10
-            name: 零件名称（模糊查询），可选
-            category: 分类(发动机类/车架类/电气类/制动类/传动类/外观件)，可选
-            supplier_id: 供应商ID，可选
+            name: 权益或营销资源名称（模糊查询），可选
+            category: 分类（影音会员/出行权益/餐饮优惠/积分礼品/营销券包），可选
+            provider_id: 权益服务商 ID，可选
         """
         http_client = ctx.request_context.lifespan_context.get("http_client")
 
@@ -38,11 +40,11 @@ def register_parts_tools(mcp: FastMCP):
             request_params["name"] = name
         if category is not None:
             request_params["category"] = category
-        if supplier_id is not None:
-            request_params["supplierId"] = supplier_id
+        if provider_id is not None:
+            request_params["providerId"] = provider_id
 
         try:
-            response = await http_client.get("/parts/page", params=request_params)
+            response = await http_client.get("/resources/page", params=request_params)
             response.raise_for_status()
             result = response.json()
 
@@ -57,18 +59,18 @@ def register_parts_tools(mcp: FastMCP):
             return [f'没有查询到任何信息，而且报错: {e}']
 
     @mcp.tool(name=f"{GROUP_NAME}_search")
-    async def search_parts(name: str, ctx: Context) -> list:
+    async def search_resources(name: str, ctx: Context) -> list:
         """
-        按名称搜索零部件。
-        与 part_query 不同，此接口直接搜索，name 为必填参数。
+        按名称搜索权益或营销资源。
+        与 resource_query 不同，此接口直接搜索，name 为必填参数。
 
         Args:
-            name: 零件名称（模糊查询），必填
+            name: 权益或营销资源名称（模糊查询），必填
         """
         http_client = ctx.request_context.lifespan_context.get("http_client")
 
         try:
-            response = await http_client.get("/parts/search", params={"name": name})
+            response = await http_client.get("/resources/search", params={"name": name})
             response.raise_for_status()
             result = response.json()
 
@@ -80,18 +82,18 @@ def register_parts_tools(mcp: FastMCP):
         except Exception as e:
             return [f'没有查询到任何信息，而且报错: {e}']
 
-    @mcp.tool(name=f"{GROUP_NAME}_by_supplier")
-    async def list_parts_by_supplier(supplier_id: int, ctx: Context) -> list:
+    @mcp.tool(name=f"{GROUP_NAME}_by_provider")
+    async def list_resources_by_provider(provider_id: int, ctx: Context) -> list:
         """
-        根据供应商 ID 查询该供应商下有采购记录的零配件列表。
+        根据服务商 ID 查询其提供的权益与营销资源列表。
 
         Args:
-            supplier_id: 供应商 ID（路径参数，必填）
+            provider_id: 权益服务商 ID（路径参数，必填）
         """
         http_client = ctx.request_context.lifespan_context.get("http_client")
 
         try:
-            response = await http_client.get(f"/parts/supplier/{supplier_id}")
+            response = await http_client.get(f"/resources/provider/{provider_id}")
             response.raise_for_status()
             result = response.json()
 

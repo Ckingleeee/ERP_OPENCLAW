@@ -1,20 +1,20 @@
-# Python ERP 后端
+# 信用卡权益与营销资源运营后端
 
-该服务替代原来的 Java ERP API，默认监听 `127.0.0.1:8080`，并保持现有 MCP 工具使用的接口契约。
+该服务默认监听 `127.0.0.1:8080`，为权益运营 MCP 工具提供稳定的业务接口。
 
 ## 接口
 
 | 方法 | 路径 | 用途 |
 |---|---|---|
 | GET | `/health` | 数据库健康检查 |
-| GET | `/api/suppliers/search?name=博世` | 按名称查询供应商 |
-| GET | `/api/parts/page` | 分页和条件查询零部件 |
-| GET | `/api/parts/search?name=火花塞` | 按名称查询零部件 |
-| GET | `/api/parts/supplier/{supplier_id}` | 查询供应商的零部件 |
-| GET | `/api/inventory/warning` | 查询低于安全库存的零部件 |
-| POST | `/api/orders/create` | 创建采购订单及明细 |
-| PUT | `/api/orders/update/{order_id}` | 更新订单，可替换明细 |
-| GET | `/api/orders/search-details` | 查询采购历史明细 |
+| GET | `/api/providers/search?name=星享` | 按名称查询权益服务商 |
+| GET | `/api/resources/page` | 分页和条件查询权益与营销资源 |
+| GET | `/api/resources/search?name=会员` | 按名称查询权益资源 |
+| GET | `/api/resources/provider/{provider_id}` | 查询服务商提供的资源 |
+| GET | `/api/quotas/warning` | 查询低于安全阈值的资源配额 |
+| POST | `/api/replenishments/create` | 创建资源补充单及明细 |
+| PUT | `/api/replenishments/update/{replenishment_id}` | 更新补充单，可替换明细 |
+| GET | `/api/replenishments/search-details` | 查询资源补充历史明细 |
 
 所有接口延续原项目响应格式：
 
@@ -32,8 +32,8 @@
 
 ```powershell
 cd D:\workspace\ERP_OPENCLAW
-py -3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1
+py -3.12 -m venv ..\erp_openclaw_venv
+..\erp_openclaw_venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements-erp.txt
 ```
@@ -43,8 +43,8 @@ python -m pip install -r requirements-erp.txt
 首次运行需要创建并导入数据库。以下命令会写入本地 MySQL，请先确认账号和目标库：
 
 ```powershell
-mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS motorparts_db CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
-mysql -u root -p motorparts_db < motorparts_db.sql
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS benefits_ops_db CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
+mysql -u root -p benefits_ops_db < docker/mysql/init/01-schema.sql
 ```
 
 ## 启动和验证
@@ -68,21 +68,20 @@ python -m mcp_server.server_main
 
 MCP 默认监听 `http://127.0.0.1:8000/mcp`。
 
-## 创建订单示例
+## 创建权益资源补充单示例
 
 ```json
 {
   "status": 1,
-  "remark": "本地接口测试",
-  "orderDetail": [
+  "remark": "九月活跃提升活动",
+  "detail": [
     {
-      "partId": 1,
-      "quantity": 2,
-      "unitPrice": 3905.00
+      "resourceId": 1,
+      "quantity": 1000,
+      "unitCost": 12.80
     }
   ]
 }
 ```
 
-创建、更新订单使用数据库事务。创建失败或明细中存在无效零部件 ID 时，订单头和明细都会回滚。
-
+创建、更新补充单使用数据库事务。明细存在无效资源 ID 时，补充单头与明细会整体回滚。

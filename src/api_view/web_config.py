@@ -32,7 +32,7 @@ MONGODB_CHECKPOINT_COLLECTION = os.getenv(
 # 登录认证配置
 # ============================================================
 AUTH_JWT_SECRET = os.getenv("AUTH_JWT_SECRET", "")
-AUTH_ISSUER = os.getenv("AUTH_ISSUER", "erp-procurement-agent")
+AUTH_ISSUER = os.getenv("AUTH_ISSUER", "card-benefits-operations-agent")
 AUTH_TOKEN_EXPIRE_MINUTES = int(os.getenv("AUTH_TOKEN_EXPIRE_MINUTES", "480"))
 AUTH_COOKIE_NAME = os.getenv("AUTH_COOKIE_NAME", "erp_session")
 AUTH_COOKIE_SECURE = _as_bool(
@@ -79,8 +79,8 @@ AGENTS_MD_PATH = PROJECT_DIR / "src" / "AGENTS.md"
 # 服务配置
 # ============================================================
 # API 服务标题
-API_TITLE = "智能采购助手ERP API"
+API_TITLE = "卡营智控 API"
 # API 版本
 API_VERSION = "1.0.0"
 # API 描述
-API_DESCRIPTION = "智能采购平台的多智能体业务 API"
+API_DESCRIPTION = "信用卡权益与营销资源智能运营工作台 API"

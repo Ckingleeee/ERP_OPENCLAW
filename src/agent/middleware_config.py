@@ -15,7 +15,7 @@ from langchain.agents.middleware import (
 
 def create_analyst_middleware(model, backend) -> list:
     """
-    为 procurement-analyst 子 Agent 创建中间件列表。
+    为 benefit-operations-analyst 子 Agent 创建中间件列表。
 
     包含:
     - SummarizationToolMiddleware: 阶段完成后主动压缩上下文
@@ -36,11 +36,11 @@ def create_analyst_middleware(model, backend) -> list:
     ]
 
 
-def create_order_middleware() -> list:
+def create_replenishment_middleware() -> list:
     """
-    为 procurement-order 子 Agent 创建中间件列表。
+    为 resource-replenishment 子 Agent 创建中间件列表。
 
-    订单操作通常是简单 API 调用，不需要摘要工具，
+    补充单操作通常是简单 API 调用，不需要摘要工具，
     只需调用限制防止异常循环。
 
     Returns:

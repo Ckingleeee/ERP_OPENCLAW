@@ -1,7 +1,7 @@
 {
-  "name": "deepagent-chat-frontend",
+  "name": "card-benefits-operations-frontend",
   "version": "1.0.0",
-  "description": "智能采购助手ERP前端 - 基于 Vue 3",
+  "description": "信用卡权益与营销资源智能运营工作台前端 - 基于 Vue 3",
   "type": "module",
   "scripts": {
     "dev": "vite",

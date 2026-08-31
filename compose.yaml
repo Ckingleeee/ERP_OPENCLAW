@@ -21,7 +21,7 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?configure MYSQL_ROOT_PASSWORD in .env}
-      MYSQL_DATABASE: ${ERP_DB_NAME:-motorparts_db}
+      MYSQL_DATABASE: ${ERP_DB_NAME:-benefits_ops_db}
       MYSQL_USER: ${ERP_DB_USER:-erp_app}
       MYSQL_PASSWORD: ${ERP_DB_PASSWORD:?configure ERP_DB_PASSWORD in .env}
       TZ: Asia/Shanghai
@@ -76,12 +76,12 @@ services:
       ERP_DB_PORT: 3306
       ERP_DB_USER: ${ERP_DB_USER:-erp_app}
       ERP_DB_PASSWORD: ${ERP_DB_PASSWORD:?configure ERP_DB_PASSWORD in .env}
-      ERP_DB_NAME: ${ERP_DB_NAME:-motorparts_db}
+      ERP_DB_NAME: ${ERP_DB_NAME:-benefits_ops_db}
       ERP_ADMIN_USERNAME: ${ERP_ADMIN_USERNAME:-yyf}
       ERP_ADMIN_PASSWORD: ${ERP_ADMIN_PASSWORD:?configure ERP_ADMIN_PASSWORD in .env}
       ERP_ADMIN_DISPLAY_NAME: ${ERP_ADMIN_DISPLAY_NAME:-yyf}
       ERP_ADMIN_ROLE: ${ERP_ADMIN_ROLE:-admin}
-      ERP_ADMIN_DEPARTMENT: ${ERP_ADMIN_DEPARTMENT:-采购部}
+      ERP_ADMIN_DEPARTMENT: ${ERP_ADMIN_DEPARTMENT:-信用卡运营部}
     depends_on:
       mysql:
         condition: service_healthy
@@ -104,7 +104,7 @@ services:
       ERP_DB_PORT: 3306
       ERP_DB_USER: ${ERP_DB_USER:-erp_app}
       ERP_DB_PASSWORD: ${ERP_DB_PASSWORD:?configure ERP_DB_PASSWORD in .env}
-      ERP_DB_NAME: ${ERP_DB_NAME:-motorparts_db}
+      ERP_DB_NAME: ${ERP_DB_NAME:-benefits_ops_db}
       ERP_DB_CHECK_ON_STARTUP: "true"
     depends_on:
       erp-init:
@@ -167,7 +167,7 @@ services:
       ERP_DB_PORT: 3306
       ERP_DB_USER: ${ERP_DB_USER:-erp_app}
       ERP_DB_PASSWORD: ${ERP_DB_PASSWORD:?configure ERP_DB_PASSWORD in .env}
-      ERP_DB_NAME: ${ERP_DB_NAME:-motorparts_db}
+      ERP_DB_NAME: ${ERP_DB_NAME:-benefits_ops_db}
       ERP_MCP_URL: http://erp-mcp:8000/mcp
       MONGODB_URI: mongodb://${MONGODB_APP_USER:-erp_agent}:${MONGODB_APP_PASSWORD:?configure MONGODB_APP_PASSWORD in .env}@mongodb:27017/${MONGODB_DB_NAME:-langchain_db}?authSource=${MONGODB_DB_NAME:-langchain_db}
       MONGODB_DB_NAME: ${MONGODB_DB_NAME:-langchain_db}
@@ -184,7 +184,7 @@ services:
       SANDBOX_PIP_INDEX_URL: ${SANDBOX_PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
       ANALYSIS_MCP_URL: ${ANALYSIS_MCP_URL:-}
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?configure AUTH_JWT_SECRET in .env}
-      AUTH_ISSUER: ${AUTH_ISSUER:-erp-procurement-agent}
+      AUTH_ISSUER: ${AUTH_ISSUER:-card-benefits-operations-agent}
       AUTH_TOKEN_EXPIRE_MINUTES: ${AUTH_TOKEN_EXPIRE_MINUTES:-480}
       AUTH_COOKIE_NAME: ${AUTH_COOKIE_NAME:-erp_session}
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}

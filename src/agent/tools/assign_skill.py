@@ -38,8 +38,8 @@ def create_assign_skill_tool(sandbox_backend, store, skills_namespace):
             skill_name: 技能目录名（如 "web-scraper"）
             agent_name: 目标 Agent：
                 - "main" — 分配给主 Agent 自身（技能已就位，直接持久化）
-                - "procurement-analyst" — 分配给采购分析子 Agent
-                - "procurement-order" — 分配给采购订单子 Agent
+                - "benefit-operations-analyst" — 分配给权益运营分析子 Agent
+                - "resource-replenishment" — 分配给营销资源补充单子 Agent
 
         Returns:
             分配确认或错误信息。

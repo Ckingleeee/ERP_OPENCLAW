@@ -2,16 +2,16 @@
   <main class="login-page">
     <section class="login-card">
       <div class="brand">
-        <img :src="logoUrl" alt="智能采购平台" />
+        <img :src="logoUrl" alt="卡营智控" />
         <div>
-          <h1>智能采购助手ERP</h1>
-          <p>智能采购平台</p>
+          <h1>卡营智控</h1>
+          <p>信用卡权益与营销资源智能运营工作台</p>
         </div>
       </div>
 
       <div class="intro">
         <h2>欢迎登录</h2>
-        <p>统一查询供应商、库存、采购订单和智能分析任务。</p>
+        <p>统一查询权益服务商、资源配额、补充历史和智能运营分析任务。</p>
       </div>
 
       <form @submit.prevent="handleSubmit">

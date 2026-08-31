@@ -14,6 +14,9 @@ from agent.internal_messages import (
 
 INTERNAL_CONTEXT_PREFIX = "【系统上下文】\n"
 INTERNAL_CONTEXT_END = (
+    "（recent_providers 和 recent_queries 由系统自动维护，你无需手动更新）"
+)
+LEGACY_INTERNAL_CONTEXT_END = (
     "（recent_suppliers 和 recent_queries 由系统自动维护，你无需手动更新）"
 )
 
@@ -61,10 +64,11 @@ def strip_internal_context_prefix(content: str) -> str:
     if not content.startswith(INTERNAL_CONTEXT_PREFIX):
         return content
 
-    _, separator, remainder = content.partition(INTERNAL_CONTEXT_END)
-    if not separator:
-        return content
-    return remainder.lstrip("\r\n")
+    for marker in (INTERNAL_CONTEXT_END, LEGACY_INTERNAL_CONTEXT_END):
+        _, separator, remainder = content.partition(marker)
+        if separator:
+            return remainder.lstrip("\r\n")
+    return content
 
 
 def strip_internal_memory_payload(content: str) -> str:
@@ -80,12 +84,19 @@ def strip_internal_memory_payload(content: str) -> str:
     except (json.JSONDecodeError, TypeError):
         return content
 
-    if (
-        not isinstance(payload, dict)
-        or set(payload) != {"suppliers", "query"}
-        or not isinstance(payload.get("suppliers"), list)
-        or not isinstance(payload.get("query"), str)
-    ):
+    valid_legacy = (
+        isinstance(payload, dict)
+        and set(payload) == {"suppliers", "query"}
+        and isinstance(payload.get("suppliers"), list)
+        and isinstance(payload.get("query"), str)
+    )
+    valid_current = (
+        isinstance(payload, dict)
+        and set(payload) == {"providers", "query"}
+        and isinstance(payload.get("providers"), list)
+        and isinstance(payload.get("query"), str)
+    )
+    if not (valid_legacy or valid_current):
         return content
     return trimmed[:start].rstrip()
 

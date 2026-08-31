@@ -43,7 +43,7 @@ class BootstrapTests(unittest.TestCase):
                 "ERP_ADMIN_PASSWORD": password,
                 "ERP_ADMIN_DISPLAY_NAME": "YYF",
                 "ERP_ADMIN_ROLE": "admin",
-                "ERP_ADMIN_DEPARTMENT": "采购部",
+                "ERP_ADMIN_DEPARTMENT": "信用卡运营部",
             },
             clear=False,
         )

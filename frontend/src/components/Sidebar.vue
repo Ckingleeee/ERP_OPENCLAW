@@ -3,10 +3,10 @@
     <!-- 侧边栏头部 -->
     <div class="sidebar-header">
       <div class="logo">
-        <img class="logo-icon" :src="logoUrl" alt="智能采购平台" />
+        <img class="logo-icon" :src="logoUrl" alt="卡营智控" />
         <div class="logo-copy">
-          <strong>智能采购平台</strong>
-          <span>智能采购助手ERP</span>
+          <strong>卡营智控</strong>
+          <span>信用卡权益运营工作台</span>
         </div>
       </div>
       <button class="new-chat-btn" @click="$emit('new-chat')">

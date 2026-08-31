@@ -23,7 +23,7 @@ class Settings:
     db_port: int = int(os.getenv("ERP_DB_PORT", "3306"))
     db_user: str = os.getenv("ERP_DB_USER", "root")
     db_password: str = os.getenv("ERP_DB_PASSWORD", "")
-    db_name: str = os.getenv("ERP_DB_NAME", "motorparts_db")
+    db_name: str = os.getenv("ERP_DB_NAME", "benefits_ops_db")
     db_connect_timeout: int = int(os.getenv("ERP_DB_CONNECT_TIMEOUT", "5"))
     check_db_on_startup: bool = _as_bool(
         os.getenv("ERP_DB_CHECK_ON_STARTUP"), default=True
@@ -31,4 +31,3 @@ class Settings:
 
 
 settings = Settings()
-

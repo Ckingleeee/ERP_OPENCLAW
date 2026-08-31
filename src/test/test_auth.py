@@ -27,8 +27,8 @@ class AuthenticationTests(unittest.TestCase):
                 cls.password.encode("utf-8"), bcrypt.gensalt(rounds=4)
             ).decode("utf-8"),
             "real_name": "yyf",
-            "role": "purchase",
-            "department": "采购部",
+            "role": "operations",
+            "department": "信用卡运营部",
         }
 
     def setUp(self):

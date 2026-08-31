@@ -1,12 +1,12 @@
 <template>
   <div class="interrupt-banner" :class="bannerClass">
     <!-- ============================================================ -->
-    <!-- 类型 1：数据补充中断（request_order_info） -->
+    <!-- 类型 1：资源补充单数据补全 -->
     <!-- ============================================================ -->
-    <template v-if="interruptData.interrupt_type === 'order_info_supplement'">
+    <template v-if="interruptData.interrupt_type === 'replenishment_info_supplement'">
       <div class="interrupt-header">
         <span class="interrupt-icon">📋</span>
-        <span class="interrupt-title">订单数据不完整，请补充以下信息</span>
+        <span class="interrupt-title">资源补充单数据不完整，请补充以下信息</span>
       </div>
 
       <div class="interrupt-body">
@@ -24,7 +24,7 @@
         <textarea
           ref="supplementInputRef"
           v-model="supplementText"
-          placeholder="请用自然语言描述要补充的信息，例如：物料ID=100、数量=50、单价25.5元、预计6月15日交货..."
+          placeholder="请用自然语言补充，例如：资源ID=100、数量=500、单位成本8.5元、预计9月15日生效..."
           class="supplement-textarea"
           rows="3"
           @keydown.enter.exact.prevent="handleSupplement"
@@ -41,7 +41,7 @@
     </template>
 
     <!-- ============================================================ -->
-    <!-- 类型 2：HITL 审批中断（order_create / order_update） -->
+    <!-- 类型 2：资源补充写操作审批 -->
     <!-- ============================================================ -->
     <template v-else-if="interruptData.interrupt_type === 'hitl_approval'">
       <div class="interrupt-header">
@@ -62,32 +62,32 @@
             <table class="order-table" v-if="action.args">
               <tbody>
                 <template v-for="(val, key) in displayArgs(action.args)" :key="key">
-                  <tr v-if="key !== 'orderDetail'">
+                  <tr v-if="key !== 'detail'">
                     <td class="field-label">{{ formatFieldName(key) }}</td>
                     <td class="field-value">{{ formatFieldValue(key, val) }}</td>
                   </tr>
                 </template>
               </tbody>
             </table>
-            <!-- 订单明细子表 -->
-            <div v-if="action.args && action.args.orderDetail && action.args.orderDetail.length" class="detail-table-wrap">
-              <div class="detail-label">订单明细 ({{ action.args.orderDetail.length }} 项)</div>
+            <!-- 补充单明细子表 -->
+            <div v-if="action.args && action.args.detail && action.args.detail.length" class="detail-table-wrap">
+              <div class="detail-label">资源明细 ({{ action.args.detail.length }} 项)</div>
               <table class="detail-table">
                 <thead>
                   <tr>
                     <th>#</th>
-                    <th>物料ID</th>
+                    <th>资源ID</th>
                     <th>数量</th>
-                    <th>单价</th>
+                    <th>单位成本</th>
                     <th>小计</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(item, di) in action.args.orderDetail" :key="di">
+                  <tr v-for="(item, di) in action.args.detail" :key="di">
                     <td>{{ di + 1 }}</td>
-                    <td>{{ item.partId || '-' }}</td>
+                    <td>{{ item.resourceId || item.resource_id || '-' }}</td>
                     <td>{{ item.quantity || '-' }}</td>
-                    <td>{{ item.unitPrice != null ? item.unitPrice : '-' }}</td>
+                    <td>{{ item.unitCost != null ? item.unitCost : (item.unit_cost != null ? item.unit_cost : '-') }}</td>
                     <td>{{ item.subtotal || '-' }}</td>
                   </tr>
                 </tbody>
@@ -178,15 +178,15 @@ function formatCollectedData(data) {
 
 function formatActionName(name) {
   const map = {
-    'order_create': '新建采购订单',
-    'order_update': '修改采购订单'
+    'replenishment_create': '新建权益资源补充单',
+    'replenishment_update': '修改权益资源补充单'
   }
   return map[name] || name
 }
 
 function displayArgs(args) {
-  // 过滤掉 orderDetail（单独展示），排除内部字段
-  const skip = ['orderDetail']
+  // 过滤掉 detail（单独展示），排除内部字段
+  const skip = ['detail']
   const result = {}
   for (const [k, v] of Object.entries(args)) {
     if (!skip.includes(k)) {
@@ -198,20 +198,31 @@ function displayArgs(args) {
 
 function formatFieldName(key) {
   const map = {
-    'orderNumber': '订单编号',
+    'replenishmentNumber': '补充单编号',
+    'replenishment_number': '补充单编号',
     'totalAmount': '总金额',
+    'total_amount': '总金额',
     'status': '状态',
-    'expectedDeliveryDate': '预计交货',
+    'replenishmentTime': '创建时间',
+    'replenishment_time': '创建时间',
+    'expectedActivationDate': '预计生效日期',
+    'expected_activation_date': '预计生效日期',
+    'actualActivationDate': '实际生效日期',
+    'actual_activation_date': '实际生效日期',
+    'createdBy': '创建人ID',
+    'created_by': '创建人ID',
     'remark': '备注',
-    'supplierId': '供应商ID',
-    'supplierName': '供应商名称'
+    'providerId': '服务商ID',
+    'provider_id': '服务商ID',
+    'providerName': '服务商名称',
+    'provider_name': '服务商名称'
   }
   return map[key] || key
 }
 
 function formatFieldValue(key, val) {
   if (key === 'status') {
-    const map = { 1: '待审核', 2: '已审核', 3: '采购中', 4: '已入库', 5: '已取消' }
+    const map = { 1: '待审核', 2: '已审核', 3: '配置中', 4: '已生效', 5: '已取消' }
     return map[val] != null ? map[val] : String(val)
   }
   if (val === null || val === undefined) return '-'
@@ -220,7 +231,7 @@ function formatFieldValue(key, val) {
 
 // CSS class
 const bannerClass = {
-  'banner-supplement': props.interruptData.interrupt_type === 'order_info_supplement',
+  'banner-supplement': props.interruptData.interrupt_type === 'replenishment_info_supplement',
   'banner-approval': props.interruptData.interrupt_type === 'hitl_approval'
 }
 </script>
@@ -363,7 +374,7 @@ const bannerClass = {
   border-radius: 6px;
 }
 
-/* 订单详情表 */
+/* 补充单详情表 */
 .order-table {
   width: 100%;
   border-collapse: collapse;

@@ -25,7 +25,10 @@ def bootstrap_admin() -> bool:
 
     real_name = os.getenv("ERP_ADMIN_DISPLAY_NAME", username).strip() or username
     role = os.getenv("ERP_ADMIN_ROLE", "admin").strip() or "admin"
-    department = os.getenv("ERP_ADMIN_DEPARTMENT", "采购部").strip() or "采购部"
+    department = (
+        os.getenv("ERP_ADMIN_DEPARTMENT", "信用卡运营部").strip()
+        or "信用卡运营部"
+    )
 
     with database.transaction() as connection:
         with connection.cursor() as cursor:

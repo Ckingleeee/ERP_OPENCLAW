@@ -1,7 +1,7 @@
 """
 运行时上下文注入中间件。
 
-从 runtime.context（ProcurementContext）中提取 user_id / username，
+从 runtime.context（BenefitsOperationsContext）中提取 user_id / username，
 在 Agent 启动时以 SystemMessage 形式注入到对话中。Agent 无需调用工具
 即可知道当前用户身份，从而正确读写 /memories/{user_id}/preferences.md。
 
@@ -81,7 +81,7 @@ class ContextInjectionMiddleware(AgentMiddleware):
             f"当前用户 username: {username}\n"
             f"用户偏好文件路径: /memories/{user_id}/preferences.md\n"
             f"\n请首先使用 read_file 读取上述偏好文件了解用户偏好。"
-            f"\n（recent_suppliers 和 recent_queries 由系统自动维护，你无需手动更新）"
+            f"\n（recent_providers 和 recent_queries 由系统自动维护，你无需手动更新）"
         )
         return {
             "messages": [

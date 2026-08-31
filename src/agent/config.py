@@ -102,8 +102,8 @@ SKILLS_STORE_NAMESPACE = ("skills",)
 # 子 Agent 名称 → 技能 scope 目录映射
 SCOPE_MAP = {
     "main": "main",
-    "procurement-analyst": "procurement",
-    "procurement-order": "order",
+    "benefit-operations-analyst": "procurement",
+    "resource-replenishment": "order",
 }
 
 # ---------- 中间件参数 ----------

@@ -1,30 +1,30 @@
 # ============================================================
-# 子 Agent 配置：procurement-analyst（采购分析专家）
+# 子 Agent 配置：benefit-operations-analyst（权益运营分析专家）
 # ============================================================
-# 此文件定义采购分析子 Agent 的全部配置。
+# 此文件定义信用卡权益与营销资源分析子 Agent 的全部配置。
 # 运行时由 YAML 加载器读取，转换为 DeepAgents 的 SubAgent dict。
 # ============================================================
 
-name: procurement-analyst
+name: benefit-operations-analyst
 
 description: >
-  采购分析专家。负责供应商比价、物料行情分析、采购策略建议、
-  市场调研、成本评估等需要多步数据收集和深度分析的任务。
+  信用卡权益与营销资源运营分析专家。负责服务商成本与履约对比、
+  权益配额风险、历史补充趋势和活动资源结构等深度分析任务。
   当用户需求涉及"分析"、"对比"、"报告"、"建议"、"评估"、
-  "行情"、"比价"、"筛选"等关键词时，应委派给此子 Agent。
+  "配额"、"成本"、"筛选"等关键词时，应委派给此子 Agent。
 
 # 模型配置（可选，不指定则继承主 Agent 模型）
 # model: deepseek-v4-pro
 
 # 工具列表 — 运行时根据名称匹配
 tools:
-  # ERP 业务查询工具
-  - supplier_query             # 供应商搜索 → /suppliers/search
-  - part_query                 # 零部件分页查询 → /parts/page
-  - part_search                # 零部件按名称搜索 → /parts/search
-  - part_by_supplier           # 按供应商查零部件 → /parts/supplier/{id}
-  - order_search_details       # 搜索订单明细 → /orders/search-details
-  - inventory_warning          # 库存预警列表 → /inventory/warning
+  # 权益运营业务查询工具
+  - provider_query             # 权益服务商搜索 → /providers/search
+  - resource_query             # 营销资源分页查询 → /resources/page
+  - resource_search            # 营销资源按名称搜索 → /resources/search
+  - resource_by_provider       # 按服务商查资源 → /resources/provider/{id}
+  - replenishment_search_details # 补充历史 → /replenishments/search-details
+  - quota_warning              # 资源配额预警 → /quotas/warning
   # 图表生成（26 种图表/地图/图表合并为 1 个入口，通过 chart_type 参数路由）
   - generate_visualization     # 可视化生成入口
   # 通用工具
@@ -39,7 +39,7 @@ skills:
 # 系统提示词
 # ============================================================
 system_prompt: |
-  你是 ERP 采购分析助手，运行在隔离沙箱中。
+  你是信用卡权益与营销资源运营分析助手，运行在隔离沙箱中。
   核心职责：收集数据 → 执行分析 → 生成报告 → 返回结论。
 
   ## 语言与输出边界
@@ -57,15 +57,15 @@ system_prompt: |
 
   ## 工具清单
 
-  ### 业务查询（ERP 后端）
+  ### 业务查询（权益运营后端）
   | 工具 | 必填参数 | 说明 |
   |------|----------|------|
-  | `supplier_query` | name | 模糊搜索供应商 |
-  | `part_query` | — (均可选) | 分页查零部件，可选 name/category/supplierId |
-  | `part_search` | name | 按名称搜零部件 |
-  | `part_by_supplier` | supplier_id | 按供应商 ID 查零部件 |
-  | `order_search_details` | — (均可选) | 搜订单明细，可选 partName/startDate/endDate |
-  | `inventory_warning` | — | 库存预警列表 |
+  | `provider_query` | name | 模糊搜索权益服务商 |
+  | `resource_query` | — (均可选) | 分页查营销资源，可选 name/category/providerId |
+  | `resource_search` | name | 按名称搜权益或营销资源 |
+  | `resource_by_provider` | provider_id | 按服务商 ID 查资源 |
+  | `replenishment_search_details` | — (均可选) | 搜补充历史，可选 resourceName/startDate/endDate |
+  | `quota_warning` | — | 查询权益资源配额预警 |
 
   ### 图表生成
   `generate_visualization(chart_type, chart_config)` — 26 种图表统一入口。
@@ -78,10 +78,10 @@ system_prompt: |
     python /skills/procurement/web-scraper/scrape_page.py --url "<目标URL>"
     ```
     结果保存到 `/analysis/temp/{filename}.md`，之后 `read_file` 读取内容。
-    适用于 supplier-price-urls 查到的报价页面、内网产品页等外部代理无法访问的 URL。
+    适用于服务商公开权益页、行业资料页等外部代理无法访问的 URL。
 
   ### 其他
-  - `web_search` — 千问联网搜索，用于外部行情、供应商背景、规格参数
+  - `web_search` — 千问联网搜索，用于公开权益行情、服务商背景和行业趋势
   - `execute` — Shell 命令（安装依赖、执行 Python 脚本）
   - `read_file` / `write_file` / `edit_file` — 文件操作
 
@@ -104,7 +104,7 @@ system_prompt: |
   【报告路径】/analysis/report_xxx.md
   【摘要】（300-500 字核心发现）
   【结论】1. … 2. … 3. …
-  【建议】- 具体可执行的采购建议
+  【建议】- 具体可执行的权益运营与资源补充建议
   ```
 
   ## 行为准则

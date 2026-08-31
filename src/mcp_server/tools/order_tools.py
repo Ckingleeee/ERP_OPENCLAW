@@ -6,26 +6,26 @@ from fastmcp import FastMCP, Context
 
 from typing import Optional, List
 
-GROUP_NAME = "order"
+GROUP_NAME = "replenishment"
 
 
-def _generate_order_number() -> str:
-    """生成订单编号：PO + 年月日(8位) + 3位随机数字"""
+def _generate_replenishment_number() -> str:
+    """生成补充单编号：BR + 年月日(8位) + 3位随机数字。"""
     today = datetime.now().strftime("%Y%m%d")
     suffix = str(random.randint(0, 999)).zfill(3)
-    return f"PO{today}{suffix}"
+    return f"BR{today}{suffix}"
 
 
 def _prepare_create_request(data: dict) -> dict:
-    """填充默认值并序列化请求体：Decimal→float，date→ISO字符串"""
-    # 自动生成 orderNumber
-    if not data.get("orderNumber"):
-        data["orderNumber"] = _generate_order_number()
+    """填充默认值并序列化请求体：Decimal→float，date→ISO字符串。"""
+    if not data.get("replenishmentNumber"):
+        data["replenishmentNumber"] = _generate_replenishment_number()
 
-    # 默认 orderTime（格式：yyyy-MM-ddTHH:mm:ss.SSS，匹配后端 CustomLocalDateTimeDeserializer）
-    if not data.get("orderTime"):
+    if not data.get("replenishmentTime"):
         now = datetime.now()
-        data["orderTime"] = now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}"
+        data["replenishmentTime"] = (
+            now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}"
+        )
 
     # 递归序列化
     return _serialize_request(data)
@@ -47,37 +47,37 @@ def _serialize_request(data: dict) -> dict:
     return data
 
 
-def register_order_tools(mcp: FastMCP):
-    """注册订单分组的所有工具"""
+def register_replenishment_tools(mcp: FastMCP):
+    """注册营销资源补充单分组的所有工具。"""
 
     @mcp.tool(name=f"{GROUP_NAME}_create")
-    async def create_order(
-        order_detail: List[dict],
-        order_number: Optional[str] = None,
+    async def create_replenishment(
+        detail: List[dict],
+        replenishment_number: Optional[str] = None,
         total_amount: Optional[float] = None,
         status: Optional[int] = None,
-        order_time: Optional[str] = None,
-        expected_delivery_date: Optional[str] = None,
-        actual_delivery_date: Optional[str] = None,
+        replenishment_time: Optional[str] = None,
+        expected_activation_date: Optional[str] = None,
+        actual_activation_date: Optional[str] = None,
         created_by: Optional[int] = None,
         remark: Optional[str] = None,
         ctx: Context = None,
     ) -> dict:
         """
-        创建采购订单（POST /orders/create）。
+        创建权益与营销资源补充单（POST /replenishments/create）。
 
-        orderNumber 不传则自动生成（规则：PO+年月日+3位随机数字）。
-        orderTime 不传则默认当前时间（格式：yyyy-MM-ddTHH:mm:ss.SSS）。
-        orderDetail 必填，至少包含一个明细项；每项需提供 partId、quantity、unitPrice。
+        replenishmentNumber 不传则自动生成（规则：BR+年月日+3位随机数字）。
+        replenishmentTime 不传则默认当前时间。
+        detail 必填，至少包含一个明细项；每项需提供 resourceId、quantity、unitCost。
 
         Args:
-            order_detail: 订单明细列表，每项需提供 partId, quantity, unitPrice，可选 subtotal, remark
-            order_number: 订单编号（唯一标识），不传则自动生成
-            total_amount: 订单总金额，不传则自动根据明细计算
-            status: 订单状态(1-待审核, 2-已审核, 3-采购中, 4-已入库, 5-已取消)，默认1
-            order_time: 下单时间，格式 yyyy-MM-ddTHH:mm:ss.SSS，不传则默认当前时间
-            expected_delivery_date: 预计交货日期，格式 yyyy-MM-dd
-            actual_delivery_date: 实际交货日期，格式 yyyy-MM-dd
+            detail: 补充明细，每项需提供 resourceId, quantity, unitCost
+            replenishment_number: 补充单编号，不传则自动生成
+            total_amount: 补充单总金额，不传则自动根据明细计算
+            status: 状态(1-待审核, 2-已审核, 3-配置中, 4-已生效, 5-已取消)
+            replenishment_time: 创建时间，格式 yyyy-MM-ddTHH:mm:ss.SSS
+            expected_activation_date: 预计生效日期，格式 yyyy-MM-dd
+            actual_activation_date: 实际生效日期，格式 yyyy-MM-dd
             created_by: 创建人 ID
             remark: 备注
         """
@@ -85,31 +85,31 @@ def register_order_tools(mcp: FastMCP):
 
         # 构建请求体（映射到 API 字段名）
         request_data = {}
-        if order_number is not None:
-            request_data["orderNumber"] = order_number
+        if replenishment_number is not None:
+            request_data["replenishmentNumber"] = replenishment_number
         if total_amount is not None:
             request_data["totalAmount"] = total_amount
         if status is not None:
             request_data["status"] = status
-        if order_time is not None:
-            request_data["orderTime"] = order_time
-        if expected_delivery_date is not None:
-            request_data["expectedDeliveryDate"] = expected_delivery_date
-        if actual_delivery_date is not None:
-            request_data["actualDeliveryDate"] = actual_delivery_date
+        if replenishment_time is not None:
+            request_data["replenishmentTime"] = replenishment_time
+        if expected_activation_date is not None:
+            request_data["expectedActivationDate"] = expected_activation_date
+        if actual_activation_date is not None:
+            request_data["actualActivationDate"] = actual_activation_date
         if created_by is not None:
             request_data["createdBy"] = created_by
         if remark is not None:
             request_data["remark"] = remark
-        if order_detail is not None:
-            request_data["orderDetail"] = order_detail
+        if detail is not None:
+            request_data["detail"] = detail
 
         request_data = _prepare_create_request(request_data)
 
         try:
             print(request_data)
             response = await http_client.post(
-                "/orders/create",
+                "/replenishments/create",
                 json=request_data
             )
             response.raise_for_status()
@@ -125,34 +125,34 @@ def register_order_tools(mcp: FastMCP):
             return {"error": str(e)}
 
     @mcp.tool(name=f"{GROUP_NAME}_update")
-    async def update_order(
-        order_id: int,
-        order_detail: Optional[List[dict]] = None,
-        order_number: Optional[str] = None,
+    async def update_replenishment(
+        replenishment_id: int,
+        detail: Optional[List[dict]] = None,
+        replenishment_number: Optional[str] = None,
         total_amount: Optional[float] = None,
         status: Optional[int] = None,
-        order_time: Optional[str] = None,
-        expected_delivery_date: Optional[str] = None,
-        actual_delivery_date: Optional[str] = None,
+        replenishment_time: Optional[str] = None,
+        expected_activation_date: Optional[str] = None,
+        actual_activation_date: Optional[str] = None,
         created_by: Optional[int] = None,
         remark: Optional[str] = None,
         ctx: Context = None,
     ) -> dict:
         """
-        更新采购订单（PUT /orders/update/{id}）。
+        更新权益与营销资源补充单（PUT /replenishments/update/{id}）。
 
-        orderDetail 为可选，传入则替换原有明细。
-        其他字段与创建订单格式一致。
+        detail 为可选，传入则替换原有明细。
+        其他字段与创建补充单格式一致。
 
         Args:
-            order_id: 订单 ID（路径参数，必填）
-            order_detail: 订单明细列表（可选），每项需提供 partId, quantity, unitPrice
-            order_number: 订单编号
-            total_amount: 订单总金额
-            status: 订单状态(1-待审核, 2-已审核, 3-采购中, 4-已入库, 5-已取消)
-            order_time: 下单时间
-            expected_delivery_date: 预计交货日期
-            actual_delivery_date: 实际交货日期
+            replenishment_id: 补充单 ID（路径参数，必填）
+            detail: 补充明细列表（可选），每项需提供 resourceId, quantity, unitCost
+            replenishment_number: 补充单编号
+            total_amount: 补充单总金额
+            status: 状态(1-待审核, 2-已审核, 3-配置中, 4-已生效, 5-已取消)
+            replenishment_time: 补充单创建时间
+            expected_activation_date: 预计生效日期
+            actual_activation_date: 实际生效日期
             created_by: 创建人 ID
             remark: 备注
         """
@@ -160,32 +160,32 @@ def register_order_tools(mcp: FastMCP):
 
         # 构建请求体（映射到 API 字段名，只包含非 None 字段）
         request_data = {}
-        if order_number is not None:
-            request_data["orderNumber"] = order_number
+        if replenishment_number is not None:
+            request_data["replenishmentNumber"] = replenishment_number
         if total_amount is not None:
             request_data["totalAmount"] = total_amount
         if status is not None:
             request_data["status"] = status
-        if order_time is not None:
-            request_data["orderTime"] = order_time
-        if expected_delivery_date is not None:
-            request_data["expectedDeliveryDate"] = expected_delivery_date
-        if actual_delivery_date is not None:
-            request_data["actualDeliveryDate"] = actual_delivery_date
+        if replenishment_time is not None:
+            request_data["replenishmentTime"] = replenishment_time
+        if expected_activation_date is not None:
+            request_data["expectedActivationDate"] = expected_activation_date
+        if actual_activation_date is not None:
+            request_data["actualActivationDate"] = actual_activation_date
         if created_by is not None:
             request_data["createdBy"] = created_by
         if remark is not None:
             request_data["remark"] = remark
-        if order_detail is not None:
-            request_data["orderDetail"] = order_detail
+        if detail is not None:
+            request_data["detail"] = detail
 
-        # 更新接口只传用户明确指定的字段，不能自动生成新订单号或重置下单时间。
+        # 更新接口只传用户明确指定的字段，不能自动生成新编号或重置创建时间。
         request_data = _serialize_request(request_data)
 
         try:
             print(request_data)
             response = await http_client.put(
-                f"/orders/update/{order_id}",
+                f"/replenishments/update/{replenishment_id}",
                 json=request_data
             )
             response.raise_for_status()
@@ -201,20 +201,20 @@ def register_order_tools(mcp: FastMCP):
             return {"error": str(e)}
 
     @mcp.tool(name=f"{GROUP_NAME}_search_details")
-    async def search_order_details(
-        part_name: Optional[str] = None,
+    async def search_replenishment_details(
+        resource_name: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         ctx: Context = None,
     ) -> list:
         """
-        搜索采购订单明细。
+        搜索权益与营销资源补充历史明细。
 
-        支持按零部件名称、日期范围筛选，所有参数均为可选。
-        返回的每条明细包含零部件详情（partDetail）及供应商信息（supplier）。
+        支持按资源名称、日期范围筛选，所有参数均为可选。
+        返回的每条明细包含资源详情（resourceDetail）及服务商信息（provider）。
 
         Args:
-            part_name: 零部件名称（模糊查询），可选
+            resource_name: 权益或营销资源名称（模糊查询），可选
             start_date: 开始日期（yyyy-MM-dd 格式），可选
             end_date: 结束日期（yyyy-MM-dd 格式），可选
         """
@@ -222,8 +222,8 @@ def register_order_tools(mcp: FastMCP):
 
         # 构建请求参数（过滤 None 值，映射到 API 字段名）
         request_params = {}
-        if part_name is not None:
-            request_params["partName"] = part_name
+        if resource_name is not None:
+            request_params["resourceName"] = resource_name
         if start_date is not None:
             request_params["startDate"] = start_date
         if end_date is not None:
@@ -231,7 +231,7 @@ def register_order_tools(mcp: FastMCP):
 
         try:
             response = await http_client.get(
-                "/orders/search-details",
+                "/replenishments/search-details",
                 params=request_params
             )
             response.raise_for_status()

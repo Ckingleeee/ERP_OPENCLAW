@@ -2,7 +2,7 @@
 主 Agent 入口模块。
 
 使用 DeepAgents `create_deep_agent` 将所有组件串联为一个可运行的
-ERP 采购智能助手。采用 Graph Factory 模式：启动时预计算可复用组件，
+信用卡权益与营销资源智能运营助手。采用 Graph Factory 模式：启动时预计算可复用组件，
 每次请求基于 per-user 沙箱轻量创建 agent graph，实现用户级沙箱隔离。
 
 使用方式:
@@ -50,7 +50,7 @@ from agent.config import (
 from agent.memory.prompts import system_prompt
 from agent.middleware_config import (
     create_analyst_middleware,
-    create_order_middleware,
+    create_replenishment_middleware,
 )
 from agent.middlewares.context_injection import ContextInjectionMiddleware
 from agent.middlewares.memory_update import MemoryUpdateMiddleware
@@ -60,10 +60,10 @@ from agent.middlewares.skills_sync import SkillsSyncMiddleware
 from agent.middlewares.tool_error import ToolErrorMiddleware
 from agent.middlewares.tools_summarization import build_summarization_middleware
 from agent.middlewares.user_skills_restore import UserSkillsRestoreMiddleware
-from agent.schema import ProcurementContext
+from agent.schema import BenefitsOperationsContext
 from agent.subagents.loader import load_subagent_configs, resolve_subagent_tools
 from agent.tools.chart_generator import create_generate_chart_tool
-from agent.tools.hitl_tools import request_order_info
+from agent.tools.hitl_tools import request_replenishment_info
 from agent.tools.assign_skill import create_assign_skill_tool
 from agent.tools.download_sandbox_file import create_download_tool
 from agent.tools.mcp_client import load_mcp_tools
@@ -104,7 +104,7 @@ class PrecomputedContext:
     """
     all_mcp_tools: list = field(default_factory=list)
     analyst_mcp_tools: list = field(default_factory=list)
-    order_mcp_tools: list = field(default_factory=list)
+    replenishment_mcp_tools: list = field(default_factory=list)
     chart_mcp_tools: list = field(default_factory=list)
     extra_mcp_tools: list = field(default_factory=list)
     generate_visualization: object = None
@@ -118,7 +118,7 @@ async def precompute_agent_context() -> PrecomputedContext:
     # Phase 2: MCP 工具加载
     logger.info("Phase 2: 加载 MCP 工具...")
     try:
-        all_mcp_tools, analyst_mcp_tools, order_mcp_tools, chart_mcp_tools = (
+        all_mcp_tools, analyst_mcp_tools, replenishment_mcp_tools, chart_mcp_tools = (
             await load_mcp_tools()
         )
     except Exception:
@@ -143,7 +143,7 @@ async def precompute_agent_context() -> PrecomputedContext:
     return PrecomputedContext(
         all_mcp_tools=all_mcp_tools,
         analyst_mcp_tools=analyst_mcp_tools,
-        order_mcp_tools=order_mcp_tools,
+        replenishment_mcp_tools=replenishment_mcp_tools,
         chart_mcp_tools=chart_mcp_tools,
         extra_mcp_tools=extra_mcp_tools,
         generate_visualization=generate_visualization,
@@ -161,7 +161,7 @@ async def create_main_agent(
     sandbox_backend: SandboxBackendProtocol,
     precomputed: PrecomputedContext,
 ):
-    """创建 ERP 采购智能助手的 per-request graph factory。
+    """创建信用卡权益运营助手的 per-request graph factory。
 
     每次请求调用，使用预计算的 MCP 工具/YAML 配置 + 外部传入的 per-user 沙箱，
     轻量创建 agent graph。SandboxBackendProxy 保证沙箱热替换不丢引用。
@@ -215,11 +215,11 @@ async def create_main_agent(
     logger.info("Phase 4: 构建工具池...")
     available_tools = (
         list(precomputed.analyst_mcp_tools)
-        + list(precomputed.order_mcp_tools)
+        + list(precomputed.replenishment_mcp_tools)
         + list(extra_mcp_tools)
         + [generate_visualization]
         + [web_search]
-        + [request_order_info]
+        + [request_replenishment_info]
         + [assign_skill]
         + [download_sandbox_file]
     )
@@ -228,8 +228,10 @@ async def create_main_agent(
     # ---- Phase 6: 子 Agent 中间件（analyst 依赖 backend_factory）----
     logger.info("Phase 6: 创建子 Agent 中间件...")
     extra_middleware = {
-        "procurement-analyst": create_analyst_middleware(SUMMARY_MODEL, backend_factory),
-        "procurement-order": create_order_middleware(),
+        "benefit-operations-analyst": create_analyst_middleware(
+            SUMMARY_MODEL, backend_factory
+        ),
+        "resource-replenishment": create_replenishment_middleware(),
     }
 
     # ---- Phase 7: 子 Agent 工具解析 ----
@@ -280,9 +282,9 @@ async def create_main_agent(
         subagents=subagents,
         middleware=main_middleware,
         backend=backend_factory,
-        store=STORE,
-        checkpointer=CHECKPOINTER,
-        context_schema=ProcurementContext,
+        store=STORE, #数据保存
+        checkpointer=CHECKPOINTER, #上下文管理和持久化（MongoDB）
+        context_schema=BenefitsOperationsContext, #接收运行时数据
     )
 
     logger.info(f"=== 用户 {user_id} Agent Graph 创建完成 ===")

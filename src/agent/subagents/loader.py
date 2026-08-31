@@ -88,8 +88,8 @@ def resolve_subagent_tools(
 
     匹配规则:
     - YAML 中 tools 的每个字符串作为前缀/子串，与 available_tools 的 .name 属性匹配
-    - 例如 "supplier_query" 匹配名为 "supplier_query" 的工具
-    - 例如 "supplier_" 匹配所有以 "supplier_" 开头的工具
+    - 例如 "provider_query" 匹配名为 "provider_query" 的工具
+    - 例如 "resource_" 匹配所有以 "resource_" 开头的工具
 
     Args:
         configs: load_subagent_configs() 返回的原始配置列表。

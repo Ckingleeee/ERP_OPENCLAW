@@ -19,8 +19,8 @@ description: 用于管理用户技能的完整生命周期：从 URL 下载技�
 
 | 子 Agent | scope | 技能路径 |
 |----------|-------|----------|
-| `procurement-analyst` | `procurement` | `/skills/procurement/` |
-| `procurement-order` | `order` | `/skills/order/` |
+| `benefit-operations-analyst` | `procurement` | `/skills/procurement/` |
+| `resource-replenishment` | `order` | `/skills/order/` |
 
 > 所有技能在 scope 下平级存放，不区分预置/持久化。
 > 子 Agent 通过渐进式披露自动发现所属 scope 下的所有技能，无需手动激活。
@@ -92,7 +92,7 @@ execute("python /skills/main/skill-management/scripts/download_skill.py '{url}'"
 
 ```
 用户未指定目标 → 提醒: "技能 '{name}' 已通过测试！请指定分配给哪个子 Agent？
-             可用: procurement-analyst（采购分析）, procurement-order（采购订单）"
+             可用: benefit-operations-analyst（权益运营分析）, resource-replenishment（资源补充单）"
            → 等待用户回复后 → 执行阶段 4
 ```
 

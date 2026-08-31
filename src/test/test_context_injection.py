@@ -83,7 +83,7 @@ class ContextInjectionTests(unittest.TestCase):
         )
         self.assertTrue(
             is_user_visible_assistant_message(
-                AIMessage(content="采购分析已完成。"),
+                AIMessage(content="权益运营分析已完成。"),
                 is_subagent=False,
             )
         )
@@ -95,7 +95,7 @@ class ContextInjectionTests(unittest.TestCase):
             "当前用户 username: yyf\n"
             "用户偏好文件路径: /memories/yyf/preferences.md\n\n"
             "请首先使用 read_file 读取上述偏好文件了解用户偏好。\n"
-            "（recent_suppliers 和 recent_queries 由系统自动维护，你无需手动更新）\n"
+            "（recent_providers 和 recent_queries 由系统自动维护，你无需手动更新）\n"
             "这是用户真正应该看到的回答。"
         )
 
@@ -107,14 +107,14 @@ class ContextInjectionTests(unittest.TestCase):
 
     def test_legacy_memory_json_is_removed_without_losing_answer(self):
         leaked = (
-            "请补充需要采购的具体物料。\n"
-            '{"suppliers": [], "query": '
-            '"用户表示需要采购，但未说明具体物料或需求"}'
+            "请补充具体权益资源。\n"
+            '{"providers": [], "query": '
+            '"用户表示需要补充权益，但需要补充具体资源"}'
         )
 
         self.assertEqual(
             sanitize_legacy_assistant_content(leaked),
-            "请补充需要采购的具体物料。",
+            "请补充具体权益资源。",
         )
         self.assertEqual(
             sanitize_legacy_assistant_content(
@@ -137,7 +137,7 @@ class ContextInjectionTests(unittest.TestCase):
             is_internal_display_message(
                 {
                     "role": "assistant",
-                    "content": "采购分析已完成。",
+                    "content": "权益运营分析已完成。",
                     "source": "main",
                 }
             )
@@ -147,7 +147,7 @@ class ContextInjectionTests(unittest.TestCase):
                 {
                     "role": "tool",
                     "text": "tool result",
-                    "source": "procurement-analyst",
+                    "source": "benefit-operations-analyst",
                 }
             )
         )

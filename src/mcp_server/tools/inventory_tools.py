@@ -1,23 +1,23 @@
 from fastmcp import FastMCP, Context
 
-GROUP_NAME = "inventory"
+GROUP_NAME = "quota"
 
 
-def register_inventory_tools(mcp: FastMCP):
-    """注册库存管理分组的所有工具"""
+def register_quota_tools(mcp: FastMCP):
+    """注册权益资源配额管理分组的所有工具。"""
 
     @mcp.tool(name=f"{GROUP_NAME}_warning")
-    async def list_inventory_warnings(ctx: Context) -> list:
+    async def list_quota_warnings(ctx: Context) -> list:
         """
-        查询库存预警列表。
-        返回所有库存不足（当前库存低于安全库存）的物料及对应的零部件详情。
+        查询权益与营销资源的配额预警列表。
+        返回所有当前配额低于安全阈值的资源及其服务商详情。
 
         无需传参。
         """
         http_client = ctx.request_context.lifespan_context.get("http_client")
 
         try:
-            response = await http_client.get("/inventory/warning")
+            response = await http_client.get("/quotas/warning")
             response.raise_for_status()
             result = response.json()
 

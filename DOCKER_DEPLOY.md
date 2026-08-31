@@ -193,17 +193,7 @@ curl http://172.17.0.1:18080/health
 docker compose restart agent-web
 ```
 
-## 9. 从现有宿主机数据库迁移
-
-不要直接删除现有 MySQL、MongoDB 或 systemd 服务。先备份：
-
-```bash
-sudo mysqldump --single-transaction --routines --triggers motorparts_db \
-  > "$PWD/motorparts_db_backup.sql"
-
-mongodump --uri="$OLD_MONGODB_URI" --archive="$PWD/langchain_db.archive" \
-  --gzip --db=langchain_db
-```
+## 9. 初始化权益运营数据库
 
 先只启动数据库：
 
@@ -212,17 +202,19 @@ docker compose up -d mysql mongodb
 docker compose ps
 ```
 
-导入 MySQL：
+首次部署时导入新的权益运营表结构和演示数据：
 
 ```bash
 docker compose exec -T mysql \
   sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' \
-  < motorparts_db_backup.sql
+  < docker/mysql/init/01-schema.sql
 ```
 
-导入 MongoDB：
+`motorparts_db.sql` 是旧业务历史归档，表结构与当前权益运营模型不兼容，不要直接导入。若需保留已有 MongoDB 对话状态，先单独备份再恢复：
 
 ```bash
+mongodump --uri="$OLD_MONGODB_URI" --archive="$PWD/langchain_db.archive" \
+  --gzip --db=langchain_db
 docker compose cp langchain_db.archive mongodb:/tmp/langchain_db.archive
 docker compose exec mongodb sh -c \
   'mongorestore --username "$MONGO_INITDB_ROOT_USERNAME" \

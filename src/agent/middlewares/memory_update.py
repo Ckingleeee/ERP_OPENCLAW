@@ -2,9 +2,9 @@
 自动记忆更新中间件。
 
 在每轮 Agent 回复完成后（aafter_agent 钩子），自动提取对话中涉及的
-供应商名称和查询摘要，更新 StoreBackend 中的用户偏好文件。
+权益服务商名称和查询摘要，更新 StoreBackend 中的用户偏好文件。
 
-Agent 无需手动维护 recent_suppliers / recent_queries —— 系统自动处理。
+Agent 无需手动维护 recent_providers / recent_queries —— 系统自动处理。
 
 使用方式:
     from agent.middlewares.memory_update import MemoryUpdateMiddleware
@@ -32,12 +32,11 @@ from agent.internal_messages import (
 
 logger = logging.getLogger(__name__)
 
-# 触发自动更新的 ERP 业务关键词（中文）
+# 触发自动更新的权益运营业务关键词
 _TRIGGER_KEYWORDS = [
-    "供应商", "物料", "采购", "订单", "价格", "分析", "对比",
-    "比价", "报价", "评估", "筛选", "推荐", "行情", "预算",
-    "库存", "交货", "交期", "质量", "成本", "报价", "招标",
-    "supplier", "part", "order", "price", "analysis",
+    "权益", "服务商", "营销资源", "配额", "补充单", "成本", "分析", "对比",
+    "核销", "履约", "评估", "筛选", "推荐", "预算", "生效", "活动",
+    "provider", "resource", "quota", "replenishment", "analysis",
 ]
 
 # 跳过更新的无意义消息模式
@@ -47,17 +46,13 @@ _SKIP_PATTERNS = [
     "我之前的偏好", "我的偏好", "我的记忆",
 ]
 
-# 只有采购意向、没有任何具体对象的消息不值得写入长期记忆。
-_GENERIC_PROCUREMENT_REQUESTS = {
-    "采购",
-    "我要采购",
-    "我想采购",
-    "我需要采购",
-    "需要采购",
-    "想采购",
-    "帮我采购",
-    "我要采购一下",
-    "我想采购一下",
+# 只有泛化运营意向、没有具体对象的消息不值得写入长期记忆。
+_GENERIC_OPERATIONS_REQUESTS = {
+    "运营",
+    "我要做运营",
+    "分析权益",
+    "补充权益",
+    "帮我补充资源",
 }
 
 # 摘要模型明确表示信息不足时，不把该摘要写入 recent_queries。
@@ -120,7 +115,7 @@ def _is_meaningful_erp_exchange(messages: List[BaseMessage]) -> Optional[str]:
         if pattern.lower().replace(" ", "") in content_lower:
             return None
 
-    if _normalize_short_text(content) in _GENERIC_PROCUREMENT_REQUESTS:
+    if _normalize_short_text(content) in _GENERIC_OPERATIONS_REQUESTS:
         return None
 
     # 检查是否包含 ERP 关键词
@@ -161,24 +156,24 @@ def _extract_ai_summary(messages: List[BaseMessage]) -> str:
 async def _extract_entities(
     model: BaseChatModel, user_message: str, ai_summary: str
 ) -> Dict[str, Any]:
-    """使用 LLM 从对话中提取供应商和查询摘要。
+    """使用 LLM 从对话中提取权益服务商和查询摘要。
 
     Returns:
-        {"suppliers": [...], "query": "..."} 或 {"suppliers": [], "query": ""}
+        {"providers": [...], "query": "..."} 或 {"providers": [], "query": ""}
     """
-    prompt = f"""Extract procurement-related entities from this conversation.
+    prompt = f"""Extract card-benefit operations entities from this conversation.
 
 Rules:
-1. "suppliers": Company/supplier names mentioned. Include both Chinese and English names. Empty list if none.
-2. "query": One-line summary of the user's procurement need. Empty string if not procurement-related.
-3. If the user only expresses a general procurement intent but provides no concrete material, supplier, quantity, budget, comparison target, or other requirement, return an empty "query".
+1. "providers": Benefit-provider or marketing-service company names mentioned. Empty list if none.
+2. "query": One-line summary of the user's benefit operations need. Empty string if unrelated.
+3. If there is no concrete resource, provider, quota, budget or comparison target, return an empty "query".
 
 User message: {user_message}
 
 Assistant response summary: {ai_summary}
 
 Return ONLY a JSON object, no other text:
-{{"suppliers": ["CompanyA", "CompanyB"], "query": "brief summary"}}"""
+{{"providers": ["CompanyA", "CompanyB"], "query": "brief summary"}}"""
 
     try:
         response = await model.ainvoke(
@@ -207,13 +202,13 @@ Return ONLY a JSON object, no other text:
         end = text.rfind("}")
         if start != -1 and end != -1 and end > start:
             result = json.loads(text[start:end + 1])
-            suppliers = result.get("suppliers", [])
-            if not isinstance(suppliers, list):
-                suppliers = []
-            suppliers = [
-                str(supplier).strip()
-                for supplier in suppliers
-                if str(supplier).strip()
+            providers = result.get("providers", [])
+            if not isinstance(providers, list):
+                providers = []
+            providers = [
+                str(provider).strip()
+                for provider in providers
+                if str(provider).strip()
             ]
 
             query = result.get("query", "")
@@ -221,13 +216,13 @@ Return ONLY a JSON object, no other text:
             if _is_vague_query(query):
                 query = ""
             return {
-                "suppliers": suppliers,
+                "providers": providers,
                 "query": query,
             }
     except Exception:
         logger.warning("MemoryUpdateMiddleware: LLM 提取失败，跳过本次更新", exc_info=True)
 
-    return {"suppliers": [], "query": ""}
+    return {"providers": [], "query": ""}
 
 
 def _create_file_value(content_str: str) -> dict:
@@ -242,7 +237,7 @@ def _create_file_value(content_str: str) -> dict:
 
 
 class MemoryUpdateMiddleware(AgentMiddleware):
-    """在 Agent 回复后自动更新用户记忆文件中的 recent_suppliers / recent_queries。
+    """在 Agent 回复后自动更新 recent_providers / recent_queries。
 
     不依赖 Agent 自觉——中间件自动提取、合并、写回。
     """
@@ -286,15 +281,15 @@ class MemoryUpdateMiddleware(AgentMiddleware):
 
             # 5. LLM 提取实体
             extracted = await _extract_entities(self.model, user_message, ai_summary)
-            suppliers = extracted.get("suppliers", [])
+            providers = extracted.get("providers", [])
             query = extracted.get("query", "")
 
-            if not suppliers and not query:
+            if not providers and not query:
                 return None
 
             logger.info(
                 f"MemoryUpdateMiddleware: user={user_id}, "
-                f"suppliers={suppliers}, query={query[:50]}"
+                f"providers={providers}, query={query[:50]}"
             )
 
             # 6. 从 store 读取当前偏好文件
@@ -325,7 +320,7 @@ class MemoryUpdateMiddleware(AgentMiddleware):
                     current_lines = value.split("\n")
 
             updated_content = _merge_preferences(
-                current_lines, suppliers, query
+                current_lines, providers, query
             )
 
             # 8. 写回 store
@@ -334,7 +329,7 @@ class MemoryUpdateMiddleware(AgentMiddleware):
 
             logger.info(
                 f"MemoryUpdateMiddleware: 已更新 {user_id} 的记忆 "
-                f"(suppliers={len(suppliers)}, query={'yes' if query else 'no'})"
+                f"(providers={len(providers)}, query={'yes' if query else 'no'})"
             )
 
         except Exception:
@@ -344,14 +339,14 @@ class MemoryUpdateMiddleware(AgentMiddleware):
 
 
 def _merge_preferences(
-    current_lines: List[str], new_suppliers: List[str], new_query: str
+    current_lines: List[str], new_providers: List[str], new_query: str
 ) -> str:
-    """将新的 suppliers/query 合并到现有偏好内容中。
+    """将新的 providers/query 合并到现有偏好内容中。
 
-    策略：先移除旧 recent_suppliers / recent_queries 区块，再在末尾追加合并后的版本。
+    策略：先移除旧 recent_providers / recent_queries 区块，再追加合并值。
     """
-    # 1. 解析旧的 suppliers 和 queries
-    existing_suppliers: List[str] = []
+    # 1. 解析旧的 providers 和 queries
+    existing_providers: List[str] = []
     existing_queries: List[str] = []
 
     def _parse_list_items(lines: List[str], start_idx: int) -> tuple:
@@ -359,7 +354,7 @@ def _merge_preferences(
         items: List[str] = []
         title_line = lines[start_idx].strip()
 
-        # 检查 inline 格式: recent_suppliers: [a, b]
+        # 检查 inline 格式: recent_providers: [a, b]
         colon_pos = title_line.find(":")
         if colon_pos != -1:
             inline = title_line[colon_pos + 1:].strip()
@@ -382,16 +377,16 @@ def _merge_preferences(
         return items, count
 
     # 2. 找出旧区块的位置和值
-    suppliers_start = -1
-    suppliers_len = 0
+    providers_start = -1
+    providers_len = 0
     queries_start = -1
     queries_len = 0
 
     for i, line in enumerate(current_lines):
         stripped = line.strip()
-        if stripped.startswith("recent_suppliers:"):
-            suppliers_start = i
-            existing_suppliers, suppliers_len = _parse_list_items(current_lines, i)
+        if stripped.startswith("recent_providers:"):
+            providers_start = i
+            existing_providers, providers_len = _parse_list_items(current_lines, i)
         elif stripped.startswith("recent_queries:"):
             queries_start = i
             existing_queries, queries_len = _parse_list_items(current_lines, i)
@@ -400,8 +395,8 @@ def _merge_preferences(
     clean_lines = list(current_lines)
     # 按起始位置降序排列，从后往前删除
     removals = []
-    if suppliers_start >= 0:
-        removals.append((suppliers_start, suppliers_len))
+    if providers_start >= 0:
+        removals.append((providers_start, providers_len))
     if queries_start >= 0:
         removals.append((queries_start, queries_len))
     removals.sort(key=lambda x: x[0], reverse=True)
@@ -410,11 +405,11 @@ def _merge_preferences(
         del clean_lines[start:start + length]
 
     # 4. 合并新值和旧值
-    merged_suppliers = list(new_suppliers)
-    for s in existing_suppliers:
-        if s not in merged_suppliers:
-            merged_suppliers.append(s)
-    merged_suppliers = merged_suppliers[:10]
+    merged_providers = list(new_providers)
+    for provider in existing_providers:
+        if provider not in merged_providers:
+            merged_providers.append(provider)
+    merged_providers = merged_providers[:10]
 
     merged_queries = (
         [new_query]
@@ -422,7 +417,7 @@ def _merge_preferences(
         else []
     )
     for q in existing_queries:
-        # 旧版本可能已经把“未说明具体物料”一类内部摘要写进偏好文件，
+        # 旧版本可能已经把“未说明具体资源”一类内部摘要写进偏好文件，
         # 在下一次合并时顺便清理，避免继续注入后续对话上下文。
         if _is_vague_query(q):
             continue
@@ -437,12 +432,12 @@ def _merge_preferences(
     if result_lines and result_lines[-1].strip():
         result_lines.append("")
 
-    result_lines.append("recent_suppliers:")
-    if merged_suppliers:
-        for s in merged_suppliers:
-            result_lines.append(f"  - {s}")
+    result_lines.append("recent_providers:")
+    if merged_providers:
+        for provider in merged_providers:
+            result_lines.append(f"  - {provider}")
     else:
-        result_lines[-1] = "recent_suppliers: []"
+        result_lines[-1] = "recent_providers: []"
 
     result_lines.append("recent_queries:")
     if merged_queries:

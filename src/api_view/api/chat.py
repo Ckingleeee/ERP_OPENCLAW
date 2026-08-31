@@ -240,7 +240,7 @@ async def stream_chat_response(
     1. 初始对话 — 传入 message（用户消息）
     2. 中断恢复 — 传入 resume_data（Command.resume 的值）
 
-    当 Agent 触发中断时（request_order_info 数据补充 / order_create|update HITL 审批），
+    当 Agent 触发中断时（资源补充单信息补全 / 写操作 HITL 审批），
     流会发送 interrupt 事件后结束。前端收集用户决策后通过 /resume 端点恢复。
 
     同时累积完整的展示消息列表（包含子代理消息），在流结束后存入 MongoDB。
@@ -322,11 +322,11 @@ async def stream_chat_response(
                             "actions": [a["name"] for a in interrupt_value["action_requests"]],
                         })
 
-                    elif interrupt_value.get("type") == "order_info_request":
-                        # ---- 第 1 层：数据补充中断（request_order_info 工具）----
+                    elif interrupt_value.get("type") == "replenishment_info_request":
+                        # ---- 第 1 层：资源补充单数据补全中断 ----
                         yield create_sse_message({
                             "type": "interrupt",
-                            "interrupt_type": "order_info_supplement",
+                            "interrupt_type": "replenishment_info_supplement",
                             "missing_fields": interrupt_value["missing_fields"],
                             "collected_data": interrupt_value["collected_data"],
                             "thread_id": thread_id,

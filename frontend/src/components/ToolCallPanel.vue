@@ -132,24 +132,24 @@ function getToolIcon(name) {
  */
 function getToolDisplayName(name) {
   const toolNameMap = {
-    task: '分配采购任务',
+    task: '分配权益运营任务',
     ls: '检查可用能力',
     read_file: '读取分析资料',
     write_file: '生成分析报告',
     edit_file: '更新分析文件',
     execute: '执行分析计算',
     generate_visualization: '生成可视化图表',
-    supplier_query: '查询供应商',
-    part_query: '查询物料',
-    part_search: '搜索物料',
-    part_by_supplier: '查询供应商物料',
-    order_search_details: '查询订单明细',
-    order_create: '创建采购订单',
-    order_update: '更新采购订单',
-    inventory_warning: '查询库存预警',
+    provider_query: '查询权益服务商',
+    resource_query: '查询营销资源',
+    resource_search: '搜索权益资源',
+    resource_by_provider: '查询服务商资源',
+    replenishment_search_details: '查询资源补充历史',
+    replenishment_create: '创建资源补充单',
+    replenishment_update: '更新资源补充单',
+    quota_warning: '查询资源配额预警',
     web_search: '查询外部资料',
     compact_conversation: '整理对话上下文',
-    request_order_info: '补充订单信息',
+    request_replenishment_info: '补充资源补充单信息',
     download_sandbox_file: '准备下载文件',
     assign_skill: '加载专业能力'
   }
@@ -168,8 +168,8 @@ function formatSource(source) {
     'researcher': '研究代理',
     'model-agent': '模型代理',
     'general': '通用代理',
-    'procurement-analyst': '采购分析助手',
-    'procurement-order': '采购订单助手',
+    'benefit-operations-analyst': '权益运营分析助手',
+    'resource-replenishment': '营销资源补充助手',
     'main': '主助手'
   }
   if (/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(source)) {

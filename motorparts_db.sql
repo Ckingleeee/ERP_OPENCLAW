@@ -1,4 +1,8 @@
 /*
+ LEGACY ARCHIVE ONLY.
+ This historical motor-parts dump is not used by the current benefits-operations application.
+ Use docker/mysql/init/01-schema.sql for the active schema and demonstration data.
+
  Navicat Premium Data Transfer
 
  Source Server         : sdf

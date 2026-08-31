@@ -2,7 +2,7 @@
 MCP 工具全量测试。
 
 测试模式：
-  - mcp_client：通过 fastmcp.Client 内存模式直接测试 MCP 服务端（需 Java 后端运行）
+  - mcp_client：通过 fastmcp.Client 内存模式直接测试 MCP 服务端（需 ERP 后端运行）
   - agent_client：通过 MultiServerMCPClient 模拟 Agent，经 HTTP 获取工具并调用
 
 运行方式：
@@ -23,28 +23,28 @@ from mcp_server.server_main import mcp
 # 随机测试数据生成
 # ============================================================
 
-SUPPLIER_NAMES = ["博世", "大陆", "德尔福", "电装", "爱信", "采埃孚", "法雷奥", "海拉"]
-PART_NAMES = ["活塞", "制动片", "火花塞", "机油滤清器", "空气滤清器", "气缸盖", "曲轴", "凸轮轴"]
-CATEGORIES = ["发动机类", "车架类", "电气类", "制动类", "传动类", "外观件"]
+PROVIDER_NAMES = ["星享数字权益", "云途生活服务", "惠味餐饮科技"]
+RESOURCE_NAMES = ["视频会员月卡", "机场贵宾厅权益", "连锁咖啡兑换券"]
+CATEGORIES = ["影音会员", "出行权益", "餐饮优惠", "积分礼品", "营销券包"]
 
 
-def _random_supplier_name() -> str:
-    return random.choice(SUPPLIER_NAMES)
+def _random_provider_name() -> str:
+    return random.choice(PROVIDER_NAMES)
 
 
-def _random_part_name() -> str:
-    return random.choice(PART_NAMES)
+def _random_resource_name() -> str:
+    return random.choice(RESOURCE_NAMES)
 
 
 def _random_category() -> str:
     return random.choice(CATEGORIES)
 
 
-def _random_supplier_id() -> int:
+def _random_provider_id() -> int:
     return random.randint(1, 50)
 
 
-def _random_part_id() -> int:
+def _random_resource_id() -> int:
     return random.randint(1, 200)
 
 
@@ -66,16 +66,16 @@ def _now_iso() -> str:
     return now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}"
 
 
-def _random_order_detail(num_items: int = 2) -> list:
-    """生成随机订单明细列表（含 subtotal）"""
+def _random_replenishment_detail(num_items: int = 2) -> list:
+    """生成随机资源补充明细列表（含 subtotal）。"""
     items = []
     for i in range(num_items):
         quantity = _random_quantity()
         unit_price = float(_random_price())
         items.append({
-            "partId": _random_part_id(),
+            "resourceId": _random_resource_id(),
             "quantity": quantity,
-            "unitPrice": unit_price,
+            "unitCost": unit_price,
             "subtotal": round(quantity * unit_price, 2),
             "remark": f"测试明细-{i+1}",
         })
@@ -86,168 +86,160 @@ def _random_order_detail(num_items: int = 2) -> list:
 # 1. mcp_client 测试（内存模式，直接调用 MCP 工具）
 # ============================================================
 
-async def test_mcp_supplier_query():
-    """测试 supplier_query — 按名称模糊搜索供应商"""
-    name = _random_supplier_name()
+async def test_mcp_provider_query():
+    """测试 provider_query — 按名称模糊搜索权益服务商。"""
+    name = _random_provider_name()
     print(f"\n{'='*60}")
-    print(f"[mcp_client] 测试 supplier_query: name={name}")
+    print(f"[mcp_client] 测试 provider_query: name={name}")
     print(f"{'='*60}")
 
     async with Client(mcp) as client:
-        result = await client.call_tool("supplier_query", {
-            "params": {"name": name}
-        })
+        result = await client.call_tool("provider_query", {"name": name})
         print(f"结果: {result}")
         return result
 
 
-async def test_mcp_part_query():
-    """测试 part_query — 分页查询零部件"""
+async def test_mcp_resource_query():
+    """测试 resource_query — 分页查询营销资源。"""
     category = _random_category()
     print(f"\n{'='*60}")
-    print(f"[mcp_client] 测试 part_query: current=1, size=5, category={category}")
+    print(f"[mcp_client] 测试 resource_query: current=1, size=5, category={category}")
     print(f"{'='*60}")
 
     async with Client(mcp) as client:
-        result = await client.call_tool("part_query", {
-            "params": {
-                "current": 1,
-                "size": 5,
-                "category": category,
-            }
+        result = await client.call_tool("resource_query", {
+            "current": 1,
+            "size": 5,
+            "category": category,
         })
         print(f"结果: {result}")
         return result
 
 
-async def test_mcp_part_search():
-    """测试 part_search — 按名称搜索零部件"""
-    name = _random_part_name()
+async def test_mcp_resource_search():
+    """测试 resource_search — 按名称搜索营销资源。"""
+    name = _random_resource_name()
     print(f"\n{'='*60}")
-    print(f"[mcp_client] 测试 part_search: name={name}")
+    print(f"[mcp_client] 测试 resource_search: name={name}")
     print(f"{'='*60}")
 
     async with Client(mcp) as client:
-        result = await client.call_tool("part_search", {"name": name})
+        result = await client.call_tool("resource_search", {"name": name})
         print(f"结果: {result}")
         return result
 
 
-async def test_mcp_part_by_supplier():
-    """测试 part_by_supplier — 按供应商 ID 查零部件"""
-    supplier_id = _random_supplier_id()
+async def test_mcp_resource_by_provider():
+    """测试 resource_by_provider — 按服务商 ID 查询营销资源。"""
+    provider_id = _random_provider_id()
     print(f"\n{'='*60}")
-    print(f"[mcp_client] 测试 part_by_supplier: supplier_id={supplier_id}")
+    print(f"[mcp_client] 测试 resource_by_provider: provider_id={provider_id}")
     print(f"{'='*60}")
 
     async with Client(mcp) as client:
-        result = await client.call_tool("part_by_supplier", {
-            "supplier_id": supplier_id
+        result = await client.call_tool("resource_by_provider", {
+            "provider_id": provider_id
         })
         print(f"结果: {result}")
         return result
 
 
-async def test_mcp_order_create():
-    """测试 order_create — 创建采购订单"""
-    order_detail = _random_order_detail(2)
-    total_amount = sum(item["subtotal"] for item in order_detail)
+async def test_mcp_replenishment_create():
+    """测试 replenishment_create — 创建资源补充单。"""
+    replenishment_detail = _random_replenishment_detail(2)
+    total_amount = sum(item["subtotal"] for item in replenishment_detail)
     test_data = {
-        "orderNumber": f"PO{datetime.now().strftime('%Y%m%d')}{str(random.randint(0, 999)).zfill(3)}",
-        "orderTime": _now_iso(),
-        "orderDetail": order_detail,
+        "replenishmentNumber": f"BR{datetime.now().strftime('%Y%m%d')}{str(random.randint(0, 999)).zfill(3)}",
+        "replenishmentTime": _now_iso(),
+        "detail": replenishment_detail,
         "totalAmount": round(total_amount, 2),
         "status": _random_status(),
-        "remark": "mcp_client 测试订单",
+        "remark": "mcp_client 测试资源补充单",
     }
     print(f"\n{'='*60}")
-    print(f"[mcp_client] 测试 order_create")
+    print("[mcp_client] 测试 replenishment_create")
     print(f"  请求体: {test_data}")
     print(f"{'='*60}")
 
     async with Client(mcp) as client:
-        result = await client.call_tool("order_create", {
-            "create_data": test_data
-        })
+        result = await client.call_tool("replenishment_create", test_data)
         print(f"结果: {result}")
         return result
 
 
-async def test_mcp_order_update():
-    """测试 order_update — 更新采购订单（含无 orderDetail 的情况）"""
-    order_id = random.randint(1, 100)
+async def test_mcp_replenishment_update():
+    """测试 replenishment_update — 更新资源补充单（含无 detail 的情况）。"""
+    replenishment_id = random.randint(1, 100)
 
-    # 场景1：带 orderDetail 的更新
-    order_detail = _random_order_detail(1)
+    # 场景1：带 detail 的更新
+    replenishment_detail = _random_replenishment_detail(1)
     test_data_with_detail = {
-        "orderNumber": f"PO{datetime.now().strftime('%Y%m%d')}{str(random.randint(0, 999)).zfill(3)}",
-        "orderTime": _now_iso(),
-        "orderDetail": order_detail,
+        "replenishmentNumber": f"BR{datetime.now().strftime('%Y%m%d')}{str(random.randint(0, 999)).zfill(3)}",
+        "replenishmentTime": _now_iso(),
+        "detail": replenishment_detail,
         "status": 3,
-        "remark": "mcp_client 测试-更新订单(含明细)",
+        "remark": "mcp_client 测试-更新补充单(含明细)",
     }
     print(f"\n{'='*60}")
-    print(f"[mcp_client] 测试 order_update (场景1: 含 orderDetail): order_id={order_id}")
+    print(f"[mcp_client] 测试 replenishment_update (场景1: 含 detail): replenishment_id={replenishment_id}")
     print(f"  请求体: {test_data_with_detail}")
     print(f"{'='*60}")
 
     async with Client(mcp) as client:
-        result1 = await client.call_tool("order_update", {
-            "order_id": order_id,
-            "update_data": test_data_with_detail,
+        result1 = await client.call_tool("replenishment_update", {
+            "replenishment_id": replenishment_id,
+            **test_data_with_detail,
         })
         print(f"结果(含明细): {result1}")
 
-        # 场景2：不带 orderDetail 的纯状态更新
+        # 场景2：不带 detail 的纯状态更新
         test_data_no_detail = {
-            "orderNumber": f"PO{datetime.now().strftime('%Y%m%d')}{str(random.randint(0, 999)).zfill(3)}",
-            "orderTime": _now_iso(),
+            "replenishmentNumber": f"BR{datetime.now().strftime('%Y%m%d')}{str(random.randint(0, 999)).zfill(3)}",
+            "replenishmentTime": _now_iso(),
             "status": 2,
             "remark": "mcp_client 测试-仅更新状态和备注",
         }
-        print(f"\n[mcp_client] 测试 order_update (场景2: 无 orderDetail，仅更新状态): order_id={order_id}")
+        print(f"\n[mcp_client] 测试 replenishment_update (场景2: 无 detail，仅更新状态): replenishment_id={replenishment_id}")
         print(f"  请求体: {test_data_no_detail}")
-        result2 = await client.call_tool("order_update", {
-            "order_id": order_id,
-            "update_data": test_data_no_detail,
+        result2 = await client.call_tool("replenishment_update", {
+            "replenishment_id": replenishment_id,
+            **test_data_no_detail,
         })
         print(f"结果(无明细): {result2}")
         return result1
 
 
-async def test_mcp_order_search_details():
-    """测试 order_search_details — 搜索订单明细"""
-    part_name = _random_part_name()
+async def test_mcp_replenishment_search_details():
+    """测试 replenishment_search_details — 搜索资源补充明细。"""
+    resource_name = _random_resource_name()
     print(f"\n{'='*60}")
-    print(f"[mcp_client] 测试 order_search_details: partName={part_name}")
+    print(f"[mcp_client] 测试 replenishment_search_details: resourceName={resource_name}")
     print(f"{'='*60}")
 
     async with Client(mcp) as client:
-        # 方式1：按零部件名称搜索
-        result = await client.call_tool("order_search_details", {
-            "params": {"partName": part_name}
+        # 方式1：按营销资源名称搜索
+        result = await client.call_tool("replenishment_search_details", {
+            "resource_name": resource_name
         })
         print(f"结果(按名称): {result}")
 
         # 方式2：按日期范围搜索
-        result2 = await client.call_tool("order_search_details", {
-            "params": {
-                "startDate": "2026-01-01",
-                "endDate": "2026-05-06",
-            }
+        result2 = await client.call_tool("replenishment_search_details", {
+            "start_date": "2026-01-01",
+            "end_date": "2026-05-06",
         })
         print(f"结果(按日期): {result2}")
         return result
 
 
-async def test_mcp_inventory_warning():
-    """测试 inventory_warning — 查询库存预警列表（无参）"""
+async def test_mcp_quota_warning():
+    """测试 quota_warning — 查询资源配额预警列表（无参）。"""
     print(f"\n{'='*60}")
-    print(f"[mcp_client] 测试 inventory_warning (无参调用)")
+    print("[mcp_client] 测试 quota_warning (无参调用)")
     print(f"{'='*60}")
 
     async with Client(mcp) as client:
-        result = await client.call_tool("inventory_warning", {})
+        result = await client.call_tool("quota_warning", {})
         print(f"结果: {result}")
         return result
 
@@ -264,13 +256,13 @@ MCP_SERVER_CONFIG = {
 }
 
 
-async def test_agent_order_create():
+async def test_agent_replenishment_create():
     """
-    模拟 Agent 通过 MultiServerMCPClient 获取 order_create 工具并调用。
+    模拟 Agent 通过 MultiServerMCPClient 获取 replenishment_create 工具并调用。
     前提：MCP Server 已启动（python -m mcp_server.server_main）
     """
     print(f"\n{'='*60}")
-    print(f"[agent_client] 模拟 Agent 测试 order_create")
+    print("[agent_client] 模拟 Agent 测试 replenishment_create")
     print(f"{'='*60}")
 
     client = MultiServerMCPClient(MCP_SERVER_CONFIG)
@@ -280,30 +272,27 @@ async def test_agent_order_create():
         all_tools = await client.get_tools(server_name="erp")
         print(f"[agent_client] 已加载 {len(all_tools)} 个 MCP 工具")
 
-        # 筛选 order_create 工具
-        order_tools = [t for t in all_tools if t.name == "order_create"]
-        if not order_tools:
-            print("[agent_client] 错误: 未找到 order_create 工具")
+        replenishment_tools = [t for t in all_tools if t.name == "replenishment_create"]
+        if not replenishment_tools:
+            print("[agent_client] 错误: 未找到 replenishment_create 工具")
             return
 
-        order_create_tool = order_tools[0]
-        print(f"[agent_client] 获取到工具: {order_create_tool.name}")
-        print(f"[agent_client] 工具描述: {order_create_tool.description}")
+        replenishment_create_tool = replenishment_tools[0]
+        print(f"[agent_client] 获取到工具: {replenishment_create_tool.name}")
+        print(f"[agent_client] 工具描述: {replenishment_create_tool.description}")
 
         # 构造测试数据
-        order_detail = _random_order_detail(2)
-        total_amount = sum(item["subtotal"] for item in order_detail)
+        replenishment_detail = _random_replenishment_detail(2)
+        total_amount = sum(item["subtotal"] for item in replenishment_detail)
 
         # 通过工具对象调用
-        result = await order_create_tool.ainvoke({
-            "create_data": {
-                "orderNumber": f"PO{datetime.now().strftime('%Y%m%d')}{str(random.randint(0, 999)).zfill(3)}",
-                "orderTime": _now_iso(),
-                "orderDetail": order_detail,
-                "totalAmount": round(total_amount, 2),
-                "status": 1,
-                "remark": "agent_client 模拟测试订单",
-            }
+        result = await replenishment_create_tool.ainvoke({
+            "replenishment_number": f"BR{datetime.now().strftime('%Y%m%d')}{str(random.randint(0, 999)).zfill(3)}",
+            "replenishment_time": _now_iso(),
+            "detail": replenishment_detail,
+            "total_amount": round(total_amount, 2),
+            "status": 1,
+            "remark": "agent_client 模拟测试补充单",
         })
         print(f"[agent_client] 执行结果: {result}")
         return result
@@ -312,13 +301,13 @@ async def test_agent_order_create():
         pass  # MultiServerMCPClient 没有显式 close 方法
 
 
-async def test_agent_inventory_warning():
+async def test_agent_quota_warning():
     """
-    模拟 Agent 通过 MultiServerMCPClient 获取 inventory_warning 工具并调用（无参）。
+    模拟 Agent 通过 MultiServerMCPClient 获取 quota_warning 工具并调用（无参）。
     前提：MCP Server 已启动（python -m mcp_server.server_main）
     """
     print(f"\n{'='*60}")
-    print(f"[agent_client] 模拟 Agent 测试 inventory_warning")
+    print("[agent_client] 模拟 Agent 测试 quota_warning")
     print(f"{'='*60}")
 
     client = MultiServerMCPClient(MCP_SERVER_CONFIG)
@@ -327,18 +316,17 @@ async def test_agent_inventory_warning():
         all_tools = await client.get_tools(server_name="erp")
         print(f"[agent_client] 已加载 {len(all_tools)} 个 MCP 工具")
 
-        # 筛选 inventory_warning 工具
-        inv_tools = [t for t in all_tools if t.name == "inventory_warning"]
-        if not inv_tools:
-            print("[agent_client] 错误: 未找到 inventory_warning 工具")
+        quota_tools = [t for t in all_tools if t.name == "quota_warning"]
+        if not quota_tools:
+            print("[agent_client] 错误: 未找到 quota_warning 工具")
             return
 
-        inv_tool = inv_tools[0]
-        print(f"[agent_client] 获取到工具: {inv_tool.name}")
-        print(f"[agent_client] 工具描述: {inv_tool.description}")
+        quota_tool = quota_tools[0]
+        print(f"[agent_client] 获取到工具: {quota_tool.name}")
+        print(f"[agent_client] 工具描述: {quota_tool.description}")
 
         # 无参调用
-        result = await inv_tool.ainvoke({})
+        result = await quota_tool.ainvoke({})
         print(f"[agent_client] 执行结果: {result}")
         return result
 
@@ -353,14 +341,14 @@ async def test_agent_inventory_warning():
 async def run_all_mcp_client_tests():
     """依次运行全部 8 个 mcp_client 测试"""
     tests = [
-        ("supplier_query", test_mcp_supplier_query),
-        ("part_query", test_mcp_part_query),
-        ("part_search", test_mcp_part_search),
-        ("part_by_supplier", test_mcp_part_by_supplier),
-        ("order_create", test_mcp_order_create),
-        ("order_update", test_mcp_order_update),
-        ("order_search_details", test_mcp_order_search_details),
-        ("inventory_warning", test_mcp_inventory_warning),
+        ("provider_query", test_mcp_provider_query),
+        ("resource_query", test_mcp_resource_query),
+        ("resource_search", test_mcp_resource_search),
+        ("resource_by_provider", test_mcp_resource_by_provider),
+        ("replenishment_create", test_mcp_replenishment_create),
+        ("replenishment_update", test_mcp_replenishment_update),
+        ("replenishment_search_details", test_mcp_replenishment_search_details),
+        ("quota_warning", test_mcp_quota_warning),
     ]
 
     results = {}
@@ -380,11 +368,11 @@ async def run_all_mcp_client_tests():
 
 
 async def run_all_agent_client_tests():
-    """依次运行 agent_client 测试：order_create + inventory_warning"""
+    """依次运行 agent_client 测试：replenishment_create + quota_warning。"""
     results = {}
     for name, test_fn in [
-        ("order_create", test_agent_order_create),
-        ("inventory_warning", test_agent_inventory_warning),
+        ("replenishment_create", test_agent_replenishment_create),
+        ("quota_warning", test_agent_quota_warning),
     ]:
         try:
             results[name] = await test_fn()

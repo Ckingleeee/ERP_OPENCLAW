@@ -1,6 +1,6 @@
-# 智能采购助手 ERP
+# 卡营智控——信用卡权益与营销资源智能运营工作台
 
-项目由 Vue 前端、Agent Web API、Python ERP API、ERP MCP、MySQL、MongoDB 和 OpenSandbox 组成。
+面向信用卡营销运营场景，支持权益服务商、营销资源、配额预警和资源补充历史的自然语言查询与分析，并通过人工审批执行资源补充单写操作。项目由 Vue 前端、Agent Web API、Python 业务 API、MCP、MySQL、MongoDB 和 OpenSandbox 组成。
 
 ## Ubuntu 一键部署
 
@@ -30,7 +30,28 @@ erpctl logs agent-web
 
 ## 本地开发
 
-下方保留 LangGraph 开发模板说明，仅用于 Agent 开发调试。
+建议把 Python 虚拟环境建在仓库外，避免生成 `.venv/`、`*.egg-info/` 或 `uv.lock`：
+
+```powershell
+cd D:\workspace\ERP_OPENCLAW
+py -3.12 -m venv ..\erp_openclaw_venv
+..\erp_openclaw_venv\Scripts\Activate.ps1
+python -m pip install -r requirements-linux.txt -r requirements-erp.txt
+$env:PYTHONPATH = (Resolve-Path .\src).Path
+```
+
+复制 `.env.example` 为 `.env` 并填写本地配置后，分别启动业务 API、MCP 和 Agent Web：
+
+```powershell
+python -m uvicorn erp_backend.main:app --host 127.0.0.1 --port 8080 --reload
+python -m mcp_server.server_main
+python -m uvicorn api_view.web_app:app --host 127.0.0.1 --port 8888 --reload
+```
+
+前端运行 `npm install`、`npm run dev`。业务 API 的数据库初始化、接口和请求示例见 [ERP_BACKEND.md](./ERP_BACKEND.md)。
+
+<details>
+<summary>历史 LangGraph 模板说明</summary>
 
 # New LangGraph Project
 
@@ -92,3 +113,5 @@ Follow-up requests extend the same thread. You can create an entirely new thread
 For more advanced features and examples, refer to the [LangGraph documentation](https://langchain-ai.github.io/langgraph/). These resources can help you adapt this template for your specific use case and build more sophisticated conversational agents.
 
 LangGraph Studio also integrates with [LangSmith](https://smith.langchain.com/) for more in-depth tracing and collaboration with teammates, allowing you to analyze and optimize your chatbot's performance.
+
+</details>

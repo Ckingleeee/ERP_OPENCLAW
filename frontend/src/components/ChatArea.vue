@@ -4,25 +4,25 @@
     <div class="message-list" ref="messageListRef">
       <!-- 空状态 -->
       <div v-if="displayMessages.length === 0" class="empty-state">
-        <div class="empty-icon"><img :src="logoUrl" alt="智能采购平台" /></div>
-        <h2>智能采购助手ERP</h2>
-        <p>连接 ERP 数据、采购分析和受控订单操作的一体化智能采购平台</p>
+        <div class="empty-icon"><img :src="logoUrl" alt="卡营智控" /></div>
+        <h2>卡营智控</h2>
+        <p>连接权益运营数据、智能分析与受控资源补充操作的一体化工作台</p>
         <div class="feature-list">
           <div class="feature-item">
             <span class="feature-icon">📊</span>
-            <span>供应商与采购数据分析</span>
+            <span>权益服务商与成本分析</span>
           </div>
           <div class="feature-item">
             <span class="feature-icon">🔍</span>
-            <span>零部件、库存与订单查询</span>
+            <span>营销资源、配额与补充历史查询</span>
           </div>
           <div class="feature-item">
             <span class="feature-icon">💻</span>
-            <span>市场信息搜索与采购建议</span>
+            <span>权益市场调研与运营建议</span>
           </div>
           <div class="feature-item">
             <span class="feature-icon">📝</span>
-            <span>人工审批后的订单操作</span>
+            <span>人工审批后的资源补充操作</span>
           </div>
         </div>
       </div>

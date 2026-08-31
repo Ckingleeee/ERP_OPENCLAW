@@ -26,7 +26,7 @@ class QwenWebSearchTests(unittest.TestCase):
         client.chat.completions.create.return_value = completion
         get_client.return_value = client
 
-        result = web_search.invoke({"query": "汽车零部件最新行情"})
+        result = web_search.invoke({"query": "信用卡出行权益市场趋势"})
 
         self.assertEqual(result, "联网搜索结果")
         call = client.chat.completions.create.call_args.kwargs

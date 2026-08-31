@@ -23,36 +23,36 @@
 
 ## category-value 模式
 
-### bar — 供应商价格横向对比
+### bar — 权益服务商成本横向对比
 - **data**: `[{category, value, group?}]`
 - **特有**: `group`(bool), `stack`(bool) — 分组/堆叠，互斥
 
-### column — 物料采购量/金额纵向对比
+### column — 营销资源补充量/金额纵向对比
 - **data**: `[{category, value, group?}]`
 - **特有**: `group`(bool), `stack`(bool) — 同 bar
 
-### pie — 采购金额占比（饼图）
+### pie — 权益资源成本占比（饼图）
 - **data**: `[{category, value}]`
 - **特有**: `innerRadius`(0~1) — 设为 0.6 左右变环形图
 
-### funnel — 采购流程转化漏斗
+### funnel — 权益发放核销转化漏斗
 - **data**: `[{category, value}]`
 
-### treemap — 采购金额层级矩形树图
+### treemap — 权益资源成本层级矩形树图
 - **data**: `{name, value, children?: [{name, value, children?: [...]}]}` — 最大深度 3 层
 
-### word_cloud — 物料/供应商高频词云
+### word_cloud — 权益资源/服务商高频词云
 - **data**: `[{text, value}]`
 
 ---
 
 ## time-value 模式
 
-### line — 价格/订单量时间趋势
+### line — 成本/补充量时间趋势
 - **data**: `[{time, value, group?}]`
 - **特有**: `style.startAtZero`(bool), `style.lineWidth`(number) — 线宽如 4
 
-### area — 库存量等随时间变化面积图
+### area — 资源配额随时间变化面积图
 - **data**: `[{time, value, group?}]`
 - **特有**: `stack`(bool) — 堆叠面积; `style.lineWidth`(number)
 
@@ -60,7 +60,7 @@
 
 ## 分布/统计模式
 
-### boxplot — 供应商交货周期分布箱线图
+### boxplot — 服务商履约周期分布箱线图
 - **data**: `[{category, value, group?}]`
 - **特有**: `style.startAtZero`(bool)
 
@@ -68,7 +68,7 @@
 - **data**: `[{category, value, group?}]`
 - **特有**: `style.startAtZero`(bool)
 
-### histogram — 价格/交货周期数值分布
+### histogram — 成本/履约周期数值分布
 - **data**: `[number, number, ...]` — 纯数值数组
 - **特有**: `binNumber`(number) — 分组区间数
 
@@ -79,18 +79,18 @@
 
 ## 多维度/流向/集合
 
-### radar — 供应商多维度综合评分雷达图
+### radar — 权益服务商多维度综合评分雷达图
 - **data**: `[{name, value, group?}]`
 - **特有**: `style.lineWidth`(number)
 
-### sankey — 物料从供应商到仓库流转桑基图
+### sankey — 权益从服务商到活动再到客户的流转桑基图
 - **data**: `[{source, target, value}]`
 - **特有**: `nodeAlign`('left'|'right'|'justify'|'center')
 
-### venn — 供应商与物料交叉韦恩图
+### venn — 服务商与权益品类交叉韦恩图
 - **data**: `[{label?, sets, value}]` — sets 如 `['A']` 或 `['A','B']` 表示交集
 
-### waterfall — 采购成本逐项增减瀑布图
+### waterfall — 权益成本逐项增减瀑布图
 - **data**: `[{category, value?, isIntermediateTotal?, isTotal?}]`
 - **特有**: `style.palette.positiveColor`(默认'#FF4D4F'), `style.palette.negativeColor`(默认'#2EBB59'), `style.palette.totalColor`(默认'#1783FF')
 
@@ -108,7 +108,7 @@
 - **data**: `{name, description?, children: [...]}` — 最大深度 3
 - **特有**: `orient`('horizontal'|'vertical') — 层级>3 建议 horizontal
 
-### mind_map — 采购策略/产品架构思维导图
+### mind_map — 权益运营策略/产品架构思维导图
 - **data**: `{name, children: [{name, children: [...]}]}` — 最大深度 3
 
 ### fishbone_diagram — 质量问题根因鱼骨图
@@ -118,17 +118,17 @@
 
 ## 节点-边图模式
 
-### flow_diagram — 采购审批/业务流程流程图
+### flow_diagram — 资源补充审批/业务流程图
 - **data**: `{nodes: [{name}], edges: [{source, target, name?}]}`
 
-### network_graph — 供应商-物料关系网络拓扑
+### network_graph — 服务商-权益资源关系网络拓扑
 - **data**: `{nodes: [{name}], edges: [{source, target, name?}]}`
 
 ---
 
 ## 特殊图表
 
-### liquid — 采购完成率/预算执行率水波图
+### liquid — 配额完成率/预算执行率水波图
 - **特有**: `percent`(0~1) **必填**; `shape`('circle'|'rect'|'pin'|'triangle'); `style.color`(string)
 
 ---
@@ -138,7 +138,7 @@
 ### district_map — 中国行政区划数据分布
 - **特有**: `title` **必填**(≤16字); `data.name` **必填** — 中国行政区名(省/市/区/县); `data.subdistricts` — 下级区域数组; `data.dataType`('number'|'enum'); `data.colors` — 颜色数组; `data.showAllSubdistricts`(bool); `data.dataLabel`/`data.dataValue`/`data.dataValueUnit` — 数据标注
 
-### pin_map — 供应商/仓库地理位置标记
+### pin_map — 服务商覆盖区域/活动网点标记
 - **特有**: `title` **必填**(≤16字); `data` **必填** — POI 中文名数组如 `["西安钟楼", "西安大雁塔"]`; `markerPopup` — 图片弹窗 `{type:"image", width, height, borderRadius}`
 
 ### path_map — 物流配送路线

@@ -15,58 +15,58 @@ from agent.middlewares.memory_update import (
 
 
 class MemoryUpdateTests(unittest.IsolatedAsyncioTestCase):
-    def test_generic_procurement_intent_is_not_memorized(self):
-        messages = [HumanMessage(content="我需要采购")]
+    def test_generic_operations_intent_is_not_memorized(self):
+        messages = [HumanMessage(content="补充权益")]
         self.assertIsNone(_is_meaningful_erp_exchange(messages))
 
     async def test_internal_model_call_is_not_streamed(self):
         model = AsyncMock()
         model.ainvoke.return_value = AIMessage(
             content=(
-                '{"suppliers": [], "query": '
-                '"用户表示需要采购，但未说明具体物料或需求"}'
+                '{"providers": [], "query": '
+                '"用户表示需要补充权益，但需要补充具体资源"}'
             )
         )
 
-        result = await _extract_entities(model, "我需要采购", "请补充物料")
+        result = await _extract_entities(model, "补充权益", "请补充资源")
 
-        self.assertEqual(result, {"suppliers": [], "query": ""})
+        self.assertEqual(result, {"providers": [], "query": ""})
         config = model.ainvoke.await_args.kwargs["config"]
         self.assertIn(TAG_NOSTREAM, config["tags"])
         self.assertIn(INTERNAL_MEMORY_TAG, config["tags"])
 
-    async def test_concrete_procurement_query_is_preserved(self):
+    async def test_concrete_operations_query_is_preserved(self):
         model = AsyncMock()
         model.ainvoke.return_value = AIMessage(
             content=(
-                '{"suppliers": ["博世"], '
-                '"query": "采购100个博世火花塞并比较报价"}'
+                '{"providers": ["星享数字权益"], '
+                '"query": "补充1000张视频会员月卡并比较成本"}'
             )
         )
 
         result = await _extract_entities(
             model,
-            "采购100个博世火花塞并比较报价",
+            "补充1000张视频会员月卡并比较成本",
             "正在分析",
         )
 
-        self.assertEqual(result["suppliers"], ["博世"])
-        self.assertEqual(result["query"], "采购100个博世火花塞并比较报价")
+        self.assertEqual(result["providers"], ["星享数字权益"])
+        self.assertEqual(result["query"], "补充1000张视频会员月卡并比较成本")
 
     def test_legacy_vague_query_is_removed_during_merge(self):
         current_lines = [
             "language: zh-CN",
             "",
-            "recent_suppliers: []",
+            "recent_providers: []",
             "recent_queries:",
-            "  - 用户表示需要采购，但未说明具体物料或需求",
+            "  - 用户表示需要补充权益，但未说明具体资源",
         ]
 
         merged = _merge_preferences(current_lines, [], "")
 
         self.assertIn("language: zh-CN", merged)
         self.assertIn("recent_queries: []", merged)
-        self.assertNotIn("未说明具体物料", merged)
+        self.assertNotIn("未说明具体资源", merged)
 
 
 if __name__ == "__main__":
