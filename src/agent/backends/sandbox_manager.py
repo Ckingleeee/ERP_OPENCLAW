@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from pymongo import MongoClient
 
 from agent.backends.sandbox_proxy import SandboxBackendProxy
+from agent.backends.sandbox_resilience import probe_sandbox_once, wait_for_sandbox
 from agent.config import SANDBOX_CONFIG
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ SANDBOX_BACKENDS: dict[str, SandboxBackendProxy] = {}
 
 _warm_reserve: SandboxBackendProxy | None = None
 _warm_lock = asyncio.Lock()
+_user_locks: dict[str, asyncio.Lock] = {}
 
 _mongo_client: MongoClient | None = None
 _collection = None
@@ -65,7 +67,17 @@ async def pre_warm() -> None:
         _warm_reserve = None
 
 
+def _user_lock(user_id: str) -> asyncio.Lock:
+    return _user_locks.setdefault(user_id, asyncio.Lock())
+
+
 async def ensure_sandbox_for_user(user_id: str) -> SandboxBackendProxy:
+    """Serialize lifecycle changes for one user's sandbox."""
+    async with _user_lock(user_id):
+        return await _ensure_sandbox_for_user(user_id)
+
+
+async def _ensure_sandbox_for_user(user_id: str) -> SandboxBackendProxy:
     """
     获取或创建某个用户的沙箱（五态生命周期）。
 
@@ -77,13 +89,17 @@ async def ensure_sandbox_for_user(user_id: str) -> SandboxBackendProxy:
     # 状态 1: 内存缓存命中
     proxy = SANDBOX_BACKENDS.get(user_id)
     if proxy is not None:
-        try:
-            await asyncio.to_thread(proxy.execute, "echo ok")
+        if await probe_sandbox_once(proxy):
             logger.info("用户 %s 命中沙箱缓存: %s", user_id, proxy.id)
             return proxy
-        except Exception:
-            logger.warning("用户 %s 的沙箱 %s 不可达，重建中...", user_id, proxy.id)
-            return await _recreate_sandbox(user_id, proxy)
+
+        logger.warning("用户 %s 的沙箱 %s 暂时不可达，等待服务恢复...", user_id, proxy.id)
+        if await wait_for_sandbox(proxy):
+            logger.info("用户 %s 的沙箱 %s 已恢复", user_id, proxy.id)
+            return proxy
+
+        logger.warning("用户 %s 的沙箱 %s 持续不可达，开始重建", user_id, proxy.id)
+        return await _recreate_sandbox(user_id, proxy)
 
     # 状态 0: 认领预热沙箱
     async with _warm_lock:
@@ -121,9 +137,7 @@ async def ensure_sandbox_for_user(user_id: str) -> SandboxBackendProxy:
             logger.warning("重连沙箱 %s 失败，将创建新沙箱", sandbox_id)
             return await _create_sandbox_for_user(user_id)
 
-        try:
-            await asyncio.to_thread(sandbox_backend.execute, "echo ok")
-        except Exception:
+        if not await wait_for_sandbox(sandbox_backend):
             logger.warning("已连接的沙箱 %s 不可达，创建新沙箱", sandbox_id)
             return await _recreate_sandbox(user_id, None)
 
@@ -144,11 +158,7 @@ async def ping_user_sandbox(user_id: str) -> bool:
     proxy = SANDBOX_BACKENDS.get(user_id)
     if proxy is None:
         return False
-    try:
-        await asyncio.to_thread(proxy.execute, "echo ok")
-        return True
-    except Exception:
-        return False
+    return await probe_sandbox_once(proxy)
 
 
 async def recreate_user_sandbox(user_id: str) -> SandboxBackendProxy:
@@ -158,22 +168,26 @@ async def recreate_user_sandbox(user_id: str) -> SandboxBackendProxy:
     创建新沙箱（含 skills 播种 + venv），替换 proxy 内的 backend，
     删除旧沙箱，更新 MongoDB 绑定。不包含 AGENTS.md 上传，由调用方负责。
     """
-    proxy = SANDBOX_BACKENDS.get(user_id)
-    return await _recreate_sandbox(user_id, proxy)
+    async with _user_lock(user_id):
+        proxy = SANDBOX_BACKENDS.get(user_id)
+        return await _recreate_sandbox(user_id, proxy)
 
 
 async def cleanup_user(user_id: str) -> None:
     """销毁某用户的沙箱。"""
-    proxy = SANDBOX_BACKENDS.pop(user_id, None)
-    if proxy is not None:
-        try:
-            from opensandbox import SandboxSync
-            await asyncio.to_thread(SandboxSync.delete, proxy.id)
-        except Exception:
-            logger.warning("删除沙箱 %s 失败", proxy.id, exc_info=True)
+    lock = _user_lock(user_id)
+    async with lock:
+        proxy = SANDBOX_BACKENDS.pop(user_id, None)
+        if proxy is not None:
+            try:
+                from opensandbox import SandboxSync
+                await asyncio.to_thread(SandboxSync.delete, proxy.id)
+            except Exception:
+                logger.warning("删除沙箱 %s 失败", proxy.id, exc_info=True)
 
-    _sandbox_collection().delete_one({"user_id": user_id})
-    logger.info("用户 %s 沙箱已清理", user_id)
+        _sandbox_collection().delete_one({"user_id": user_id})
+        logger.info("用户 %s 沙箱已清理", user_id)
+    _user_locks.pop(user_id, None)
 
 
 async def shutdown() -> None:

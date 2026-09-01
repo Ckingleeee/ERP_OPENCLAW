@@ -34,6 +34,7 @@
           :key="message.id || index"
           :message="message"
           :is-streaming="isStreamingForMessage(message)"
+          @retry="emit('retry', $event)"
         />
       </div>
     </div>
@@ -66,6 +67,8 @@ const props = defineProps({
     default: true
   }
 })
+
+const emit = defineEmits(['retry'])
 
 // 根据开关过滤展示的消息
 const displayMessages = computed(() => {

@@ -151,4 +151,6 @@ class StreamDoneEvent(BaseModel):
 class StreamErrorEvent(BaseModel):
     """错误事件"""
     type: str = "error"
+    code: str = Field("INTERNAL_ERROR", description="稳定错误码")
     message: str = Field(..., description="错误信息")
+    retryable: bool = Field(False, description="是否允许用户安全重试请求")

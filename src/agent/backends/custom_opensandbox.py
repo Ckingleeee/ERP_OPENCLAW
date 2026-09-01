@@ -15,20 +15,17 @@ from deepagents.backends.protocol import (
 )
 from deepagents.backends.sandbox import BaseSandbox
 
+from agent.backends.sandbox_resilience import (
+    PROBE_MARKER,
+    SandboxExecutionUncertainError,
+    SandboxUnavailableError,
+    classify_sandbox_exception,
+)
+
 SyncPollingInterval = float | Callable[[float], float]
 PollingStrategy = Callable[[float], float]
 # 配置日志
 logger = logging.getLogger(__name__)
-# logger.setLevel(logging.DEBUG)
-logger.setLevel(logging.ERROR)
-
-# 如果没有配置日志处理器，则添加一个
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    handler.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
 
 class OpenSandboxBackend(BaseSandbox):
     """基于 OpenSandbox 的沙箱后端。
@@ -150,11 +147,27 @@ class OpenSandboxBackend(BaseSandbox):
                     truncated=False,
                 )
 
+            sandbox_error = classify_sandbox_exception(e)
+            if isinstance(sandbox_error, SandboxExecutionUncertainError):
+                raise sandbox_error from e
+            if isinstance(sandbox_error, SandboxUnavailableError):
+                # commands.run encapsulates dispatch and result polling. Even a
+                # refusal can happen after dispatch, so blind replay is unsafe.
+                raise SandboxExecutionUncertainError(sandbox_error.detail) from e
+
             return ExecuteResponse(
                 output=f"执行命令时出错：{error_msg}",
                 exit_code=1,
                 truncated=False,
             )
+
+    def health_check(self) -> ExecuteResponse:
+        """Run a fast probe without command-level transport retries."""
+        command = (
+            f'export PATH="{self.SANDBOX_PATH}:$PATH" '
+            f'&& printf {PROBE_MARKER}'
+        )
+        return self._execute_command(command, timeout=10)
 
     def download_files(self, paths: list[str]) -> list[FileDownloadResponse]:
         """从沙箱下载指定文件。
@@ -180,7 +193,10 @@ class OpenSandboxBackend(BaseSandbox):
                 responses.append(
                     FileDownloadResponse(path=path, content=content_bytes, error=None)
                 )
-            except Exception:
+            except Exception as e:
+                sandbox_error = classify_sandbox_exception(e)
+                if sandbox_error is not None:
+                    raise sandbox_error from e
                 responses.append(
                     FileDownloadResponse(path=path, content=None, error="file_not_found")
                 )
@@ -221,6 +237,9 @@ class OpenSandboxBackend(BaseSandbox):
             try:
                 self._sandbox.files.write_files(upload_entries)
             except Exception as e:
+                sandbox_error = classify_sandbox_exception(e)
+                if sandbox_error is not None:
+                    raise sandbox_error from e
                 # 若写操作失败，将所有成功准备但未真正上传的条目标记为错误
                 for resp in responses:
                     if resp.error is None:

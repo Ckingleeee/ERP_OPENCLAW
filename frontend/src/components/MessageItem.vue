@@ -35,6 +35,14 @@
         <MarkdownRenderer :content="message.content" />
         <span v-if="isStreaming && message.content" class="typing-cursor">▋</span>
       </div>
+      <button
+        v-if="message.retryable && message.retry_message"
+        type="button"
+        class="retry-button"
+        @click="emit('retry', message)"
+      >
+        重新执行本次请求
+      </button>
     </div>
   </div>
 
@@ -54,6 +62,7 @@
           {{ getSourceName(message.source) }}
         </span>
         <span v-if="message.tool_status === 'calling' && !hasToolContent" class="tool-status-badge calling">执行中</span>
+        <span v-else-if="message.tool_status === 'error'" class="tool-status-badge error">中断</span>
         <span v-else-if="hasToolContent" class="tool-status-badge done">完成</span>
       </div>
 
@@ -114,6 +123,8 @@ const props = defineProps({
   message: { type: Object, required: true },
   isStreaming: { type: Boolean, default: false }
 })
+
+const emit = defineEmits(['retry'])
 
 const expandedSections = ref(['result'])
 
@@ -328,6 +339,11 @@ function cleanText(text) {
   color: #065f46;
 }
 
+.tool-status-badge.error {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
 /* ============================================================ */
 /* 用户消息（右侧） */
 /* ============================================================ */
@@ -374,6 +390,22 @@ function cleanText(text) {
   padding: 14px 18px;
   line-height: 1.7;
   overflow: hidden;
+}
+
+.retry-button {
+  margin-top: 10px;
+  padding: 8px 14px;
+  border: 1px solid #0ea5e9;
+  border-radius: 8px;
+  color: #0369a1;
+  background: #f0f9ff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.retry-button:hover {
+  background: #e0f2fe;
 }
 
 .avatar-main { background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); }

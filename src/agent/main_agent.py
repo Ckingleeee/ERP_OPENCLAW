@@ -246,7 +246,7 @@ async def create_main_agent(
     # ---- Phase 8: 主 Agent 中间件栈 ----
     logger.info("Phase 8: 构建主 Agent 中间件栈...")
     main_middleware = [
-        # 1. 沙箱健康守护：每次 agent step 前 ping → 失败自动恢复
+        # 1. 沙箱健康守护：启动前检查；工具异常后等待恢复或自动重建
         SandboxHealthMiddleware(
             sandbox_backend=sandbox_backend,
             user_id=user_id,

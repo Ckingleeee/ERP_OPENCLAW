@@ -5,6 +5,7 @@
 """
 
 import json
+import logging
 import uuid
 import re
 import os
@@ -25,6 +26,11 @@ from agent.schema import (
 from api_view.agent_loader import agent_loader
 from api_view.auth import CurrentUser, get_current_user
 from api_view.message_visibility import is_user_visible_assistant_message
+from api_view.runtime_errors import classify_runtime_error
+from api_view.sse import HEARTBEAT, with_heartbeat
+
+
+logger = logging.getLogger(__name__)
 
 
 # 创建路由
@@ -250,28 +256,11 @@ async def stream_chat_response(
     context = {"user_id": user_id, "username": username or user_id}
     config = agent_loader.create_config(thread_id, user_id=user_id)
 
-    # 获取该用户的 per-user agent graph（沙箱缓存 + 预计算组件）
-    agent_graph = await agent_loader.get_agent_for_user(user_id)
     collected_content = ""
     # 工具调用栈，支持嵌套工具调用（主代理调 task → 子代理调 generate_chart）
     tool_call_stack = []
 
-    # ---- 根据模式构建 input 和 display_messages ----
-    if resume_data is not None:
-        # 恢复模式：加载已有展示消息，用 Command(resume=...) 恢复
-        existing = await agent_loader.get_display_messages(thread_id) or []
-        display_messages = existing
-        current_input = Command(resume=resume_data)
-    else:
-        # 初始模式：新建展示消息，用普通消息作为 input
-        current_input = {"messages": [{"role": "user", "content": message}]}
-        display_messages = [
-            {
-                "id": f"user-{uuid.uuid4()}",
-                "role": "user",
-                "content": message
-            }
-        ]
+    display_messages = []
 
     # 创建调试日志文件
     debug_log = get_debug_log_path(thread_id)
@@ -287,16 +276,49 @@ async def stream_chat_response(
             "is_resume": resume_data is not None,
         })
 
+        # Send the server-assigned ID before any long-running work. If the stream
+        # later disconnects, the client can retry against the same conversation.
+        yield create_sse_message({
+            "type": "session",
+            "thread_id": thread_id,
+        })
+
+        # 获取该用户的 per-user agent graph（沙箱缓存 + 预计算组件）。
+        # 放在 try/yield 之后，初始化失败时客户端也能收到结构化错误和 thread_id。
+        agent_graph = await agent_loader.get_agent_for_user(user_id)
+
+        # ---- 根据模式构建 input 和 display_messages ----
+        if resume_data is not None:
+            # 恢复模式：加载已有展示消息，用 Command(resume=...) 恢复
+            existing = await agent_loader.get_display_messages(thread_id) or []
+            display_messages = existing
+            current_input = Command(resume=resume_data)
+        else:
+            # 初始模式：新建展示消息，用普通消息作为 input
+            current_input = {"messages": [{"role": "user", "content": message}]}
+            display_messages = [
+                {
+                    "id": f"user-{uuid.uuid4()}",
+                    "role": "user",
+                    "content": message
+                }
+            ]
+
         # 流式调用 agent.astream()
         # stream_mode=["messages", "values"] — messages 流显示 + values 流检测中断
-        async for chunk in agent_graph.astream(
+        agent_stream = agent_graph.astream(
             input=current_input,
             config=config,
             context=context,
             stream_mode=["messages", "values"],
             subgraphs=True, # 启用子代理流式输出
             version="v2",
-        ):
+        )
+        async for chunk in with_heartbeat(agent_stream):
+            if chunk is HEARTBEAT:
+                # SSE comments are ignored by clients but keep proxies/connections alive.
+                yield ": keep-alive\n\n"
+                continue
             chunk_type = chunk.get("type")
 
             # ---- 值流（中断检测，必须在 messages 处理之前）----
@@ -583,10 +605,26 @@ async def stream_chat_response(
         })
 
     except Exception as e:
-        write_debug_log(debug_log, "STREAM_ERROR", {"error": str(e)})
+        error_info = classify_runtime_error(e)
+        logger.exception(
+            "chat_stream_failed code=%s retryable=%s thread_id=%s user_id=%s",
+            error_info.code,
+            error_info.retryable,
+            thread_id,
+            user_id,
+        )
+        write_debug_log(debug_log, "STREAM_ERROR", {
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "error_code": error_info.code,
+            "retryable": error_info.retryable,
+        })
         yield create_sse_message({
             "type": "error",
-            "message": str(e)
+            "code": error_info.code,
+            "message": error_info.message,
+            "retryable": error_info.retryable,
+            "thread_id": thread_id,
         })
 
 

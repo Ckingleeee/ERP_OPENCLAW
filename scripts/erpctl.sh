@@ -24,7 +24,7 @@ usage() {
 说明：
   start    启动 Docker、OpenSandbox 和全部 ERP 容器
   stop     停止 ERP 容器和 OpenSandbox，保留数据库卷
-  restart  重启 OpenSandbox 和应用容器，不重启数据库
+  restart  按安全顺序重启 Agent 与 OpenSandbox，不重启数据库和 ERP API
   status   查看系统服务和容器状态
   health   检查公网入口（本机）及 OpenSandbox
   logs     持续查看日志，可指定 agent-web、frontend、erp-api 等服务
@@ -127,11 +127,14 @@ stop_all() {
 }
 
 restart_apps() {
+  # Stop new/active agent traffic before restarting its execution control plane.
+  # Restarting OpenSandbox first creates an avoidable connection-refused window.
+  compose stop frontend agent-web
+
   sudo systemctl restart opensandbox
   wait_for_url "OpenSandbox" "$SANDBOX_HEALTH_URL"
 
-  compose stop frontend agent-web erp-mcp erp-api
-  compose up -d --no-build
+  compose up -d --no-build agent-web frontend
   wait_for_url "ERP" "$APP_HEALTH_URL"
   show_status
 }

@@ -8,6 +8,58 @@ import { apiFetch } from './http.js'
 
 const API_BASE = '/api/chat'
 
+export class ChatStreamError extends Error {
+  constructor(message, options = {}) {
+    super(message)
+    this.name = 'ChatStreamError'
+    this.code = options.code || 'CHAT_STREAM_ERROR'
+    this.retryable = options.retryable === true
+    this.threadId = options.threadId || null
+    this.partialContent = options.partialContent || ''
+  }
+}
+
+function normalizeChatError(error, threadId = null) {
+  if (error instanceof ChatStreamError || error?.name === 'AbortError') {
+    return error
+  }
+
+  const rawMessage = String(error?.message || error || '')
+  const isTransportFailure = error instanceof TypeError || [
+    'network error',
+    'failed to fetch',
+    'load failed',
+    'network request failed',
+    'connection was closed'
+  ].some(marker => rawMessage.toLowerCase().includes(marker))
+
+  if (isTransportFailure) {
+    return new ChatStreamError(
+      '与服务器的连接意外中断，后台任务可能仍在执行，请先查看当前会话结果，避免重复操作。',
+      { code: 'NETWORK_DISCONNECTED', retryable: false, threadId }
+    )
+  }
+
+  return new ChatStreamError(
+    rawMessage || '请求处理失败，请稍后重试。',
+    { code: 'REQUEST_FAILED', retryable: false, threadId }
+  )
+}
+
+async function createHttpError(response, action) {
+  let message = `${action}失败（HTTP ${response.status}）`
+  try {
+    const payload = await response.clone().json()
+    message = payload.detail || payload.message || message
+  } catch {
+    // Non-JSON error responses use the stable status-based message above.
+  }
+  return new ChatStreamError(message, {
+    code: `HTTP_${response.status}`,
+    retryable: response.status === 408 || response.status === 429 || response.status >= 500
+  })
+}
+
 /**
  * 流式对话
  *
@@ -23,6 +75,7 @@ const API_BASE = '/api/chat'
  * @param {Function} callbacks.onToolEnd - 工具调用结束时的回调 (tool: object) => void
  * @param {Function} callbacks.onInterrupt - 检测到中断时的回调 (interruptData: object) => void
  * @param {Function} callbacks.onDone - 流结束时的回调 (data: object) => void
+ * @param {Function} callbacks.onSession - 服务端确认会话 ID 时的回调 (threadId: string) => void
  * @param {Function} callbacks.onError - 发生错误时的回调 (error: Error) => void
  * @param {AbortSignal} signal - 可选的 AbortSignal，用于取消请求
  * @returns {Promise} 返回包含 thread_id, content, tool_calls 的结果
@@ -49,10 +102,10 @@ export async function streamChat(message, threadId = null, callbacks = {}, signa
     })
 
     if (!response.ok) {
-      throw new Error(`请求失败: ${response.status} ${response.statusText}`)
+      throw await createHttpError(response, '请求')
     }
 
-    return await _processStream(response, threadId, callbacks, fullContent, toolCalls, toolStack)
+    return await processChatStream(response, threadId, callbacks, fullContent, toolCalls, toolStack)
 
   } catch (error) {
     if (error.name === 'AbortError') {
@@ -67,9 +120,10 @@ export async function streamChat(message, threadId = null, callbacks = {}, signa
       callbacks.onDone?.(result)
       return result
     }
-    console.error('[ChatAPI] 流式请求失败:', error)
-    callbacks.onError?.(error)
-    throw error
+    const normalizedError = normalizeChatError(error, threadId)
+    console.error('[ChatAPI] 流式请求失败:', normalizedError)
+    callbacks.onError?.(normalizedError)
+    throw normalizedError
   }
 }
 
@@ -102,10 +156,10 @@ export async function resumeChat(threadId, resumeData, callbacks = {}, signal = 
     })
 
     if (!response.ok) {
-      throw new Error(`恢复请求失败: ${response.status} ${response.statusText}`)
+      throw await createHttpError(response, '恢复请求')
     }
 
-    return await _processStream(response, threadId, callbacks, fullContent, toolCalls, toolStack)
+    return await processChatStream(response, threadId, callbacks, fullContent, toolCalls, toolStack)
 
   } catch (error) {
     if (error.name === 'AbortError') {
@@ -119,23 +173,32 @@ export async function resumeChat(threadId, resumeData, callbacks = {}, signal = 
       callbacks.onDone?.(result)
       return result
     }
-    console.error('[ChatAPI] 恢复请求失败:', error)
-    callbacks.onError?.(error)
-    throw error
+    const normalizedError = normalizeChatError(error, threadId)
+    console.error('[ChatAPI] 恢复请求失败:', normalizedError)
+    callbacks.onError?.(normalizedError)
+    throw normalizedError
   }
 }
 
 /**
  * 处理流式响应的内部函数（streamChat 和 resumeChat 共用）
  */
-async function _processStream(response, threadId, callbacks, fullContent, toolCalls, toolStack) {
+export async function processChatStream(response, threadId, callbacks, fullContent, toolCalls, toolStack) {
   // 获取 reader 来读取流
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
 
   while (true) {
-    const { done, value } = await reader.read()
+    let readResult
+    try {
+      readResult = await reader.read()
+    } catch (error) {
+      const normalizedError = normalizeChatError(error, threadId)
+      normalizedError.partialContent = fullContent
+      throw normalizedError
+    }
+    const { done, value } = readResult
 
     if (done) {
       break
@@ -153,10 +216,20 @@ async function _processStream(response, threadId, callbacks, fullContent, toolCa
         continue
       }
 
+      let data
       try {
-        const data = JSON.parse(line.slice(5).trim())
+        data = JSON.parse(line.slice(5).trim())
+      } catch (parseError) {
+        console.warn('[ChatAPI] 解析 SSE 数据失败:', parseError)
+        continue
+      }
 
-        switch (data.type) {
+      switch (data.type) {
+          case 'session':
+            threadId = data.thread_id || threadId
+            callbacks.onSession?.(threadId)
+            break
+
           case 'token':
             // AI 生成的文本片段
             fullContent += data.content
@@ -230,29 +303,32 @@ async function _processStream(response, threadId, callbacks, fullContent, toolCa
             return result
 
           case 'error':
-            // 错误
-            throw new Error(data.message)
+            throw new ChatStreamError(
+              data.message || '服务端处理请求失败。',
+              {
+                code: data.code || 'SERVER_STREAM_ERROR',
+                retryable: data.retryable === true,
+                threadId: data.thread_id || threadId,
+                partialContent: fullContent
+              }
+            )
 
           default:
             break
-        }
-      } catch (parseError) {
-        // 如果是取消导致的，向上抛出
-        if (parseError.name === 'AbortError') {
-          throw parseError
-        }
-        // 忽略解析错误，可能是多行 JSON
-        console.warn('[ChatAPI] 解析 SSE 数据失败:', parseError)
       }
     }
   }
 
-  // 如果没有收到 done 事件，返回已收集的内容
-  return {
-    thread_id: threadId,
-    content: fullContent,
-    tool_calls: toolCalls
-  }
+  // A normal stream always ends with done or interrupt. EOF alone means truncation.
+  throw new ChatStreamError(
+    '与服务器的流式连接提前结束，后台任务状态暂时无法确认，请先查看会话结果。',
+    {
+      code: 'STREAM_INCOMPLETE',
+      retryable: false,
+      threadId,
+      partialContent: fullContent
+    }
+  )
 }
 
 /**

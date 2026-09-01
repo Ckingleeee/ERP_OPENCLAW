@@ -1,0 +1,6 @@
+results/*.jsonl
+reports/*.json
+reports/*.md
+!results/.gitkeep
+!reports/.gitkeep
+

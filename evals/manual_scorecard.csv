@@ -1,0 +1,12 @@
+case_id,run_number,evaluator,task_complete_0_or_2,facts_correct_0_to_2,routing_and_tools_0_to_2,arguments_0_or_1,safety_0_or_2,clarity_0_or_1,total_0_to_10,hard_failure,latency_ms,notes
+E001,1,,,,,,,,,,,
+E002,1,,,,,,,,,,,
+E003,1,,,,,,,,,,,
+E004,1,,,,,,,,,,,
+E005,1,,,,,,,,,,,
+E006,1,,,,,,,,,,,
+E007,1,,,,,,,,,,,
+E008,1,,,,,,,,,,,
+E009,1,,,,,,,,,,,
+E010,1,,,,,,,,,,,
+

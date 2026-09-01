@@ -16,6 +16,8 @@ from langchain.agents.middleware.types import ToolCallRequest
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 
+from agent.backends.sandbox_resilience import SandboxServiceError
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,12 +35,19 @@ def _tool_name(request: ToolCallRequest) -> str | None:
     return getattr(tc, "name", None)
 
 
-def _build_error_payload(e: Exception, request: ToolCallRequest) -> dict[str, str]:
-    data: dict[str, str] = {
+def _build_error_payload(e: Exception, request: ToolCallRequest) -> dict[str, Any]:
+    data: dict[str, Any] = {
         "error": str(e)[:500],
         "error_type": type(e).__name__,
         "status": "error",
     }
+    if isinstance(e, SandboxServiceError):
+        data.update({
+            "error": e.user_message,
+            "error_code": e.code,
+            "retryable": e.retryable,
+            "execution_uncertain": e.execution_uncertain,
+        })
     name = _tool_name(request)
     if name:
         data["name"] = name

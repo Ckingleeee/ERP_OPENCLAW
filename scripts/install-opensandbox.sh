@@ -11,6 +11,7 @@ CONFIG_FILE="$CONFIG_DIR/config.toml"
 STATE_DIR="${OPENSANDBOX_STATE_DIR:-/var/lib/opensandbox}"
 SERVICE_FILE="/etc/systemd/system/opensandbox.service"
 PORT="${OPENSANDBOX_PORT:-18080}"
+WAS_ACTIVE=false
 
 log() {
   printf '[OpenSandbox] %s\n' "$*"
@@ -47,6 +48,10 @@ fi
 [[ -f "$ENV_FILE" ]] || die "找不到 $ENV_FILE"
 [[ -f "$VALIDATOR" ]] || die "找不到环境校验脚本"
 command -v docker >/dev/null 2>&1 || die "Docker 尚未安装"
+
+if systemctl is-active --quiet opensandbox; then
+  WAS_ACTIVE=true
+fi
 
 source /etc/os-release
 if [[ "${ID:-}" != "ubuntu" && "${ID:-}" != "debian" ]]; then
@@ -152,7 +157,13 @@ EOF
 
 chmod 644 "$SERVICE_FILE"
 systemctl daemon-reload
-systemctl enable --now opensandbox
+systemctl enable opensandbox
+if [[ "$WAS_ACTIVE" == true ]]; then
+  log "重启 OpenSandbox 以加载显式安装/升级内容"
+  systemctl restart opensandbox
+else
+  systemctl start opensandbox
+fi
 
 if command -v ufw >/dev/null 2>&1 && ufw status | grep -q '^Status: active'; then
   if ! ufw status | grep -Fq "$bridge_ip $PORT/tcp"; then

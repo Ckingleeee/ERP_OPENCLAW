@@ -7,7 +7,7 @@ ENV_FILE="$PROJECT_DIR/.env"
 VALIDATOR="$PROJECT_DIR/scripts/validate-docker-env.py"
 INSTALL_OPENSANDBOX="$PROJECT_DIR/scripts/install-opensandbox.sh"
 BUILD_IMAGES=true
-INSTALL_SANDBOX=true
+INSTALL_SANDBOX=auto
 PULL_IMAGES=false
 
 log() {
@@ -26,7 +26,8 @@ usage() {
 
 选项：
   --no-build            使用服务器已有镜像，不重新构建
-  --reuse-opensandbox   不重新安装或改写现有 OpenSandbox
+  --reuse-opensandbox   强制复用现有 OpenSandbox，服务不健康时终止部署
+  --install-opensandbox 显式安装/升级 OpenSandbox（会重启该服务）
   --pull-images         主动更新数据库镜像和构建基础镜像
   -h, --help            显示帮助
 
@@ -41,6 +42,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     --reuse-opensandbox)
       INSTALL_SANDBOX=false
+      ;;
+    --install-opensandbox)
+      INSTALL_SANDBOX=true
       ;;
     --pull-images)
       PULL_IMAGES=true
@@ -208,6 +212,20 @@ log "校验 .env"
 python3 "$VALIDATOR" "$ENV_FILE"
 
 ensure_docker
+
+if [[ "$INSTALL_SANDBOX" == auto ]]; then
+  if systemctl is-active --quiet opensandbox; then
+    bridge_ip="$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')"
+    [[ -n "$bridge_ip" ]] || die "无法读取 Docker bridge 网关"
+    curl --fail --silent --show-error --max-time 5 \
+      "http://$bridge_ip:18080/health" >/dev/null \
+      || die "现有 OpenSandbox 不健康；请先排障，或在维护窗口使用 --install-opensandbox"
+    log "复用健康的 OpenSandbox；常规部署不会重装或重启它"
+    INSTALL_SANDBOX=false
+  else
+    INSTALL_SANDBOX=true
+  fi
+fi
 
 if [[ "$INSTALL_SANDBOX" == true ]]; then
   log "安装并配置 OpenSandbox"

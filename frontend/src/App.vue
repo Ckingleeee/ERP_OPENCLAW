@@ -28,6 +28,7 @@
         :messages="messages"
         :streaming="isStreaming"
         :show-tool-calls="showToolCalls"
+        @retry="handleRetry"
       />
 
       <!-- ★ 人工介入中断横幅（数据补充 / HITL 审批） -->
@@ -95,6 +96,35 @@ const showToolCalls = ref(true)
 const interruptData = ref(null)
 // AbortController 用于停止流式请求
 let abortController = null
+
+function appendChatError(error, retryMessage = null) {
+  for (const item of messages.value) {
+    if (item.role === 'tool' && item.tool_status === 'calling') {
+      item.tool_status = 'error'
+    }
+  }
+
+  const errorMessage = error?.message || '请求处理失败，请稍后重试。'
+  const errorCode = error?.code || 'REQUEST_FAILED'
+  const retryable = error?.retryable === true && !!retryMessage
+  const data = {
+    content: `抱歉，${errorMessage}\n\n错误码：\`${errorCode}\``,
+    error_code: errorCode,
+    retryable,
+    retry_message: retryable ? retryMessage : null,
+    source: 'main'
+  }
+  const lastMsg = messages.value[messages.value.length - 1]
+  if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.content) {
+    Object.assign(lastMsg, data)
+  } else {
+    messages.value.push({
+      id: `assistant-error-${Date.now()}`,
+      role: 'assistant',
+      ...data
+    })
+  }
+}
 
 // ============================================================
 // 生命周期
@@ -267,6 +297,13 @@ async function handleSend(message) {
       message,
       currentThreadId.value,
       {
+        onSession: (threadId) => {
+          if (threadId && !currentThreadId.value) {
+            currentThreadId.value = threadId
+            loadSessions()
+          }
+        },
+
         // 接收到 token 时的回调
         onToken: (content, source) => {
           const lastMsg = messages.value[messages.value.length - 1]
@@ -403,17 +440,11 @@ async function handleSend(message) {
         // 发生错误时的回调
         onError: (error) => {
           console.error('[App] 对话错误:', error)
-          const lastMsg = messages.value[messages.value.length - 1]
-          if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.content) {
-            lastMsg.content = `抱歉，发生了错误：${error.message}`
-          } else {
-            messages.value.push({
-              id: `assistant-${Date.now()}`,
-              role: 'assistant',
-              content: `抱歉，发生了错误：${error.message}`,
-              source: 'main'
-            })
+          if (error.threadId && !currentThreadId.value) {
+            currentThreadId.value = error.threadId
+            loadSessions()
           }
+          appendChatError(error, message)
         }
       },
       abortController.signal
@@ -428,6 +459,14 @@ async function handleSend(message) {
     isStreaming.value = false
     abortController = null
   }
+}
+
+async function handleRetry(errorMessage) {
+  if (isStreaming.value || !errorMessage?.retry_message) return
+  errorMessage.retryable = false
+  const originalMessage = errorMessage.retry_message
+  errorMessage.retry_message = null
+  await handleSend(originalMessage)
 }
 
 // ============================================================
@@ -567,18 +606,8 @@ async function handleResume(resumeData) {
 
         onError: (error) => {
           console.error('[App] 恢复对话错误:', error)
-          interruptData.value = null  // 出错时清除中断状态，恢复普通输入
-          const lastMsg = messages.value[messages.value.length - 1]
-          if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.content) {
-            lastMsg.content = `抱歉，发生了错误：${error.message}`
-          } else {
-            messages.value.push({
-              id: `assistant-${Date.now()}`,
-              role: 'assistant',
-              content: `抱歉，发生了错误：${error.message}`,
-              source: 'main'
-            })
-          }
+          // 审批恢复可能已经触发业务写入，不提供自动重放，保留原中断供核对。
+          appendChatError(error)
         }
       },
       abortController.signal
