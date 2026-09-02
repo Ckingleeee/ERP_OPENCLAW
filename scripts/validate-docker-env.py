@@ -116,6 +116,19 @@ def validate(path: Path) -> int:
         else:
             validate_url(key, value, errors)
 
+    analysis_mcp_url = values.get("ANALYSIS_MCP_URL", "")
+    if analysis_mcp_url:
+        validate_url("ANALYSIS_MCP_URL", analysis_mcp_url, errors)
+        analysis_host = (urlparse(analysis_mcp_url).hostname or "").lower()
+        if analysis_host == "xiaobenyang.com" or analysis_host.endswith(
+            ".xiaobenyang.com"
+        ):
+            xby_api_key = values.get("XBY_API_KEY", "")
+            if is_placeholder(xby_api_key):
+                errors.append(
+                    "XBY_API_KEY 尚未配置；小笨羊 MCP 执行工具时需要 XBY-APIKEY 请求头"
+                )
+
     for key in ("MONGODB_APP_USER", "MONGODB_APP_PASSWORD"):
         value = values.get(key, "")
         if value and not URL_SAFE_MONGODB_PATTERN.fullmatch(value):

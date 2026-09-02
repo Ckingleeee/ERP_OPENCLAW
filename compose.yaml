@@ -183,6 +183,7 @@ services:
       OPEN_SANDBOX_IMAGE: ${OPEN_SANDBOX_IMAGE:-sandbox-registry.cn-zhangjiakou.cr.aliyuncs.com/opensandbox/code-interpreter:v1.0.2}
       SANDBOX_PIP_INDEX_URL: ${SANDBOX_PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
       ANALYSIS_MCP_URL: ${ANALYSIS_MCP_URL:-}
+      XBY_API_KEY: ${XBY_API_KEY:-}
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?configure AUTH_JWT_SECRET in .env}
       AUTH_ISSUER: ${AUTH_ISSUER:-card-benefits-operations-agent}
       AUTH_TOKEN_EXPIRE_MINUTES: ${AUTH_TOKEN_EXPIRE_MINUTES:-480}

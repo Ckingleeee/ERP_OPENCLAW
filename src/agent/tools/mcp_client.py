@@ -12,6 +12,7 @@ MCP 工具客户端。
 
 import os
 from typing import List, Tuple
+from urllib.parse import urlparse
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
@@ -25,11 +26,25 @@ MCP_SERVER_CONFIG = {
 }
 
 ANALYSIS_MCP_URL = os.getenv("ANALYSIS_MCP_URL", "").strip()
+XBY_API_KEY = os.getenv("XBY_API_KEY", "").strip()
 if ANALYSIS_MCP_URL:
-    MCP_SERVER_CONFIG["analysis"] = {
-        "url": ANALYSIS_MCP_URL,
-        "transport": "streamable_http",
-    }
+    analysis_host = (urlparse(ANALYSIS_MCP_URL).hostname or "").lower()
+    is_xiaobenyang = analysis_host == "xiaobenyang.com" or analysis_host.endswith(
+        ".xiaobenyang.com"
+    )
+    if is_xiaobenyang and not XBY_API_KEY:
+        print(
+            "[WARNING] 已配置小笨羊 ANALYSIS_MCP_URL，但缺少 XBY_API_KEY，"
+            "已跳过外部图表工具"
+        )
+    else:
+        analysis_config = {
+            "url": ANALYSIS_MCP_URL,
+            "transport": "streamable_http",
+        }
+        if is_xiaobenyang and XBY_API_KEY:
+            analysis_config["headers"] = {"XBY-APIKEY": XBY_API_KEY}
+        MCP_SERVER_CONFIG["analysis"] = analysis_config
 
 # 工具分组规则（前缀匹配）
 ANALYST_TOOL_PREFIXES = ("provider_", "resource_", "quota_")

@@ -81,6 +81,9 @@ sudo bash ./scripts/deploy.sh --no-build --reuse-opensandbox
 - `ALIBABA_API_KEY`
 - `OPEN_SANDBOX_API_KEY`
 
+如启用小笨羊图表 MCP，还必须同时配置 `ANALYSIS_MCP_URL` 和
+`XBY_API_KEY`。后者会作为 `XBY-APIKEY` HTTP 请求头发送，禁止提交到 Git。
+
 建议数据库密码只使用字母和数字的长随机串，避免 MongoDB URI 出现未编码的 `@`、`:`、`/` 等字符。
 
 `.env` 已被 Git 忽略，不得提交。
