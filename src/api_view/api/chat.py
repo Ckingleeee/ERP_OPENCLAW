@@ -4,6 +4,7 @@
 提供流式对话接口、中断恢复接口和会话状态查询接口
 """
 
+import asyncio
 import json
 import logging
 import uuid
@@ -11,6 +12,7 @@ import re
 import os
 import tempfile
 from datetime import datetime
+from time import monotonic
 from typing import AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -31,6 +33,9 @@ from api_view.sse import HEARTBEAT, with_heartbeat
 
 
 logger = logging.getLogger(__name__)
+
+PARTIAL_DISPLAY_SAVE_INTERVAL_SECONDS = 5.0
+SSE_HEARTBEAT_INTERVAL_SECONDS = 15.0
 
 
 # 创建路由
@@ -232,12 +237,13 @@ class ResumeRequest(BaseModel):
 # 流式对话核心逻辑
 # ============================================================
 
-async def stream_chat_response(
+async def _stream_chat_response_core(
     message: str = None,
     thread_id: str = None,
     resume_data: dict = None,
     user_id: str = None,
     username: str = None,
+    lifecycle: dict | None = None,
 ) -> AsyncIterator[str]:
     """
     流式生成对话响应，支持 Human-in-the-Loop 中断与恢复。
@@ -261,15 +267,49 @@ async def stream_chat_response(
     tool_call_stack = []
 
     display_messages = []
+    existing_messages = []
+    last_partial_save_at = 0.0
+    lifecycle = lifecycle if lifecycle is not None else {}
 
     # 创建调试日志文件
-    debug_log = get_debug_log_path(thread_id)
+    debug_log = str(lifecycle.get("debug_log") or get_debug_log_path(thread_id))
+    lifecycle["debug_log"] = debug_log
+
+    def _set_stage(stage: str) -> None:
+        lifecycle["stage"] = stage
+
+    def _all_display_messages() -> list[dict]:
+        if resume_data is not None:
+            return display_messages
+        return existing_messages + display_messages
+
+    async def _persist_partial(*, force: bool = False) -> None:
+        nonlocal last_partial_save_at
+        now = monotonic()
+        if not force and now - last_partial_save_at < PARTIAL_DISPLAY_SAVE_INTERVAL_SECONDS:
+            return
+        messages = _all_display_messages()
+        if not messages:
+            return
+        previous_stage = str(lifecycle.get("stage") or "agent_running")
+        _set_stage("saving_partial_display")
+        saved = await agent_loader.save_display_messages(
+            thread_id, messages, user_id=user_id
+        )
+        last_partial_save_at = monotonic()
+        write_debug_log(debug_log, "SAVE_DISPLAY_PARTIAL", {
+            "thread_id": thread_id,
+            "message_count": len(messages),
+            "saved": saved,
+        })
+        _set_stage(previous_stage)
 
     def _last_display_is_assistant():
         return (display_messages and
                 display_messages[-1]["role"] == "assistant")
 
     try:
+        _set_stage("starting")
         write_debug_log(debug_log, "STREAM_START", {
             "message": message,
             "thread_id": thread_id,
@@ -283,18 +323,16 @@ async def stream_chat_response(
             "thread_id": thread_id,
         })
 
-        # 获取该用户的 per-user agent graph（沙箱缓存 + 预计算组件）。
-        # 放在 try/yield 之后，初始化失败时客户端也能收到结构化错误和 thread_id。
-        agent_graph = await agent_loader.get_agent_for_user(user_id)
-
         # ---- 根据模式构建 input 和 display_messages ----
+        _set_stage("loading_history")
         if resume_data is not None:
             # 恢复模式：加载已有展示消息，用 Command(resume=...) 恢复
             existing = await agent_loader.get_display_messages(thread_id) or []
             display_messages = existing
             current_input = Command(resume=resume_data)
         else:
-            # 初始模式：新建展示消息，用普通消息作为 input
+            # 初始模式：先加载历史，再立即保存本轮用户消息。
+            existing_messages = await agent_loader.get_display_messages(thread_id) or []
             current_input = {"messages": [{"role": "user", "content": message}]}
             display_messages = [
                 {
@@ -303,6 +341,12 @@ async def stream_chat_response(
                     "content": message
                 }
             ]
+            await _persist_partial(force=True)
+
+        # 获取该用户的 per-user agent graph（沙箱缓存 + 预计算组件）。
+        # 外层 stream_chat_response 的心跳覆盖这段冷启动/恢复窗口。
+        _set_stage("agent_initialization")
+        agent_graph = await agent_loader.get_agent_for_user(user_id)
 
         # 流式调用 agent.astream()
         # stream_mode=["messages", "values"] — messages 流显示 + values 流检测中断
@@ -314,11 +358,8 @@ async def stream_chat_response(
             subgraphs=True, # 启用子代理流式输出
             version="v2",
         )
-        async for chunk in with_heartbeat(agent_stream):
-            if chunk is HEARTBEAT:
-                # SSE comments are ignored by clients but keep proxies/connections alive.
-                yield ": keep-alive\n\n"
-                continue
+        _set_stage("agent_running")
+        async for chunk in agent_stream:
             chunk_type = chunk.get("type")
 
             # ---- 值流（中断检测，必须在 messages 处理之前）----
@@ -376,15 +417,17 @@ async def stream_chat_response(
                     dm for dm in display_messages
                     if not (dm["role"] == "assistant" and not dm.get("content"))
                 ]
+                display_messages = cleaned
 
                 # 保存部分展示消息到 MongoDB（中断前的消息状态）
-                # 注意：resume 模式下 display_messages 已含历史，保存时会覆盖旧记录
+                _set_stage("saving_interrupt_display")
+                all_messages = _all_display_messages()
                 await agent_loader.save_display_messages(
-                    thread_id, cleaned, user_id=user_id
+                    thread_id, all_messages, user_id=user_id
                 )
                 write_debug_log(debug_log, "SAVE_DISPLAY_INTERRUPT", {
                     "thread_id": thread_id,
-                    "message_count": len(cleaned),
+                    "message_count": len(all_messages),
                 })
 
                 # 发送 done 事件标记流结束（前端由此知道可以展示中断 UI）
@@ -417,6 +460,7 @@ async def stream_chat_response(
                 for tool_chunk in token.tool_call_chunks:
                     # 工具开始调用
                     if tool_chunk.get('name'):
+                        _set_stage(f"tool_running:{tool_chunk['name']}")
                         tool_id = str(uuid.uuid4())
                         new_tool = {
                             "id": tool_id,
@@ -450,6 +494,7 @@ async def stream_chat_response(
                             "source": source,
                             "stack_depth": len(tool_call_stack)
                         })
+                        await _persist_partial()
 
                     # 工具参数
                     if tool_chunk.get('args'):
@@ -521,6 +566,9 @@ async def stream_chat_response(
                         dm["tool_status"] = "done"
                         break
 
+                await _persist_partial(force=True)
+                _set_stage("agent_running")
+
             # 处理 AI 文本内容
             # 注意：ToolMessage（type == "tool"）的内容是工具执行结果，已在上面
             # tool_result 事件中处理。这里必须跳过，否则工具结果会被当作 AI 文本重复输出。
@@ -561,6 +609,7 @@ async def stream_chat_response(
                         "content": content_text,
                         "source": source
                     })
+                await _persist_partial()
 
         # ---- 流正常结束（无中断）----
         # 兜底：将所有 calling 状态的工具标记为 done
@@ -574,16 +623,9 @@ async def stream_chat_response(
             if not (dm["role"] == "assistant" and not dm.get("content"))
         ]
 
-        # 保存用户可见消息到 MongoDB；子代理自然语言已在流边界过滤，
-        # 仅保留其工具进度供前端按需展开查看。
-        # 多轮对话：追加到已有消息，而非覆盖（每轮调用 save 时 display_messages 仅含当前轮）
-        if resume_data is None:
-            # 初始对话：追加到已有历史
-            existing = await agent_loader.get_display_messages(thread_id) or []
-            all_messages = existing + display_messages
-        else:
-            # resume 模式：display_messages 已包含历史（load 时获取），直接保存
-            all_messages = display_messages
+        # 保存用户可见消息到 MongoDB；外层心跳继续覆盖最终持久化阶段。
+        _set_stage("saving_final_display")
+        all_messages = _all_display_messages()
         await agent_loader.save_display_messages(
             thread_id, all_messages, user_id=user_id
         )
@@ -597,6 +639,7 @@ async def stream_chat_response(
             "thread_id": thread_id,
             "total_content_len": len(collected_content)
         })
+        _set_stage("completed")
 
         yield create_sse_message({
             "type": "done",
@@ -605,6 +648,7 @@ async def stream_chat_response(
         })
 
     except Exception as e:
+        _set_stage("error")
         error_info = classify_runtime_error(e)
         logger.exception(
             "chat_stream_failed code=%s retryable=%s thread_id=%s user_id=%s",
@@ -626,6 +670,55 @@ async def stream_chat_response(
             "retryable": error_info.retryable,
             "thread_id": thread_id,
         })
+
+
+async def stream_chat_response(
+    message: str = None,
+    thread_id: str = None,
+    resume_data: dict = None,
+    user_id: str = None,
+    username: str = None,
+) -> AsyncIterator[str]:
+    """Keep the complete chat lifecycle alive and log client disconnects."""
+    lifecycle = {
+        "stage": "starting",
+        "debug_log": get_debug_log_path(thread_id),
+    }
+    started_at = monotonic()
+    core_stream = _stream_chat_response_core(
+        message=message,
+        thread_id=thread_id,
+        resume_data=resume_data,
+        user_id=user_id,
+        username=username,
+        lifecycle=lifecycle,
+    )
+    try:
+        async for event in with_heartbeat(
+            core_stream,
+            interval_seconds=SSE_HEARTBEAT_INTERVAL_SECONDS,
+        ):
+            if event is HEARTBEAT:
+                yield ": keep-alive\n\n"
+            else:
+                yield event
+    except (asyncio.CancelledError, GeneratorExit):
+        elapsed_ms = round((monotonic() - started_at) * 1000)
+        stage = str(lifecycle.get("stage") or "unknown")
+        logger.warning(
+            "chat_stream_disconnected thread_id=%s user_id=%s stage=%s elapsed_ms=%s",
+            thread_id,
+            user_id,
+            stage,
+            elapsed_ms,
+        )
+        write_debug_log(str(lifecycle["debug_log"]), "CLIENT_DISCONNECTED", {
+            "thread_id": thread_id,
+            "user_id": user_id,
+            "stage": stage,
+            "elapsed_ms": elapsed_ms,
+        })
+        raise
 
 
 # ============================================================

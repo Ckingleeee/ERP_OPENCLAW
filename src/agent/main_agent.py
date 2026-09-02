@@ -195,7 +195,10 @@ async def create_main_agent(
     # ---- Phase 1.4: 上传 AGENTS.md 到沙箱 ----
     logger.info("Phase 1.4: 上传 AGENTS.md 到沙箱...")
     ag_md_content = LOCAL_AGENTS_MD.read_text(encoding="utf-8")
-    sandbox_backend.upload_files([("/AGENTS.md", ag_md_content.encode("utf-8"))])
+    await asyncio.to_thread(
+        sandbox_backend.upload_files,
+        [("/AGENTS.md", ag_md_content.encode("utf-8"))],
+    )
 
     # ---- Phase 2/3/5: 使用预计算结果 ----
     logger.info("Phase 2-5: 使用预计算的 MCP 工具 + 图表工具 + YAML 配置...")

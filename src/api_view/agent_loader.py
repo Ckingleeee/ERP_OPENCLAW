@@ -5,6 +5,7 @@ Agent 加载器
 启动时预计算 MCP 工具/YAML 配置，每次请求基于 per-user 沙箱创建 agent graph。
 """
 
+import asyncio
 import sys
 from pathlib import Path
 from typing import Optional, List, Dict, Any
@@ -338,6 +339,20 @@ class AgentLoader:
         messages: List[Dict[str, Any]],
         user_id: str | None = None,
     ) -> bool:
+        """Persist display messages without blocking the request event loop."""
+        return await asyncio.to_thread(
+            self._save_display_messages_sync,
+            thread_id,
+            messages,
+            user_id,
+        )
+
+    def _save_display_messages_sync(
+        self,
+        thread_id: str,
+        messages: List[Dict[str, Any]],
+        user_id: str | None = None,
+    ) -> bool:
         if self._mongodb_client is None:
             return False
         try:
@@ -352,7 +367,7 @@ class AgentLoader:
                 now = datetime.now()
                 docs = []
                 for i, msg in enumerate(messages):
-                    msg = self._truncate_message_fields(msg)
+                    msg = self._truncate_message_fields({**msg})
                     docs.append({
                         "thread_id": thread_id,
                         "index": i,
@@ -371,6 +386,12 @@ class AgentLoader:
             return False
 
     async def get_display_messages(self, thread_id: str) -> Optional[List[Dict[str, Any]]]:
+        """Load display messages without blocking the request event loop."""
+        return await asyncio.to_thread(self._get_display_messages_sync, thread_id)
+
+    def _get_display_messages_sync(
+        self, thread_id: str
+    ) -> Optional[List[Dict[str, Any]]]:
         if self._mongodb_client is None:
             return None
         try:

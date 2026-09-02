@@ -126,6 +126,28 @@ function appendChatError(error, retryMessage = null) {
   }
 }
 
+async function reconcileAfterStreamError(error, retryMessage = null) {
+  const threadId = error?.threadId || currentThreadId.value
+  if (!threadId) {
+    appendChatError(error, retryMessage)
+    return
+  }
+
+  try {
+    const response = await getMessages(threadId)
+    if (currentThreadId.value === threadId) {
+      messages.value = response.messages || messages.value
+      appendChatError(error, retryMessage)
+    }
+    await loadSessions()
+  } catch (refreshError) {
+    console.error('[App] 断线后同步会话结果失败:', refreshError)
+    if (currentThreadId.value === threadId) {
+      appendChatError(error, retryMessage)
+    }
+  }
+}
+
 // ============================================================
 // 生命周期
 // ============================================================
@@ -444,7 +466,7 @@ async function handleSend(message) {
             currentThreadId.value = error.threadId
             loadSessions()
           }
-          appendChatError(error, message)
+          void reconcileAfterStreamError(error, message)
         }
       },
       abortController.signal
@@ -607,7 +629,7 @@ async function handleResume(resumeData) {
         onError: (error) => {
           console.error('[App] 恢复对话错误:', error)
           // 审批恢复可能已经触发业务写入，不提供自动重放，保留原中断供核对。
-          appendChatError(error)
+          void reconcileAfterStreamError(error)
         }
       },
       abortController.signal
