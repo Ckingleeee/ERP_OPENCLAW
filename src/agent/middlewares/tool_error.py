@@ -14,6 +14,7 @@ from typing import Any
 from langchain.agents.middleware import AgentMiddleware, AgentState
 from langchain.agents.middleware.types import ToolCallRequest
 from langchain_core.messages import ToolMessage
+from langgraph.errors import GraphBubbleUp
 from langgraph.types import Command
 
 from agent.backends.sandbox_resilience import SandboxServiceError
@@ -66,6 +67,9 @@ class ToolErrorMiddleware(AgentMiddleware):
     ) -> ToolMessage | Command:
         try:
             return handler(request)
+        except GraphBubbleUp:
+            # Interrupts and parent commands are graph control flow, not tool failures.
+            raise
         except Exception as e:
             logger.warning(
                 "工具调用异常: tool=%s, error=%s: %s",
@@ -84,6 +88,9 @@ class ToolErrorMiddleware(AgentMiddleware):
     ) -> ToolMessage | Command:
         try:
             return await handler(request)
+        except GraphBubbleUp:
+            # Keep async tool execution consistent with the synchronous path.
+            raise
         except Exception as e:
             logger.warning(
                 "工具调用异常: tool=%s, error=%s: %s",
